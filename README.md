@@ -245,6 +245,9 @@ npm run db:validate
 
 # Test database flexibility
 npm run db:test
+
+# Fix supporter lifetime statistics (if needed)
+npm run fix:supporter-stats
 ```
 
 ## 📈 Monitoring & Logging
@@ -254,8 +257,11 @@ npm run db:test
 # Check sync status
 node scripts/health-check.js
 
-# Database statistics
-node scripts/db-stats.js
+# Validate supporter statistics accuracy
+node scripts/recalculate-supporter-stats.js validate
+
+# Recalculate supporter lifetime statistics (if needed)
+npm run fix:supporter-stats
 ```
 
 ### Logs

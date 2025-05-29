@@ -1,7 +1,7 @@
 {
   "name": "gofundmepro-sync",
   "version": "1.0.0",
-  "description": "Comprehensive data synchronization system for GoFundMe Pro (Classy) with MailChimp integration and advanced donor analytics",
+  "description": "Universal database synchronization system for GoFundMe Pro (Classy) with MailChimp integration, advanced donor analytics, and automated data integrity validation",
   "main": "daemon.js",
   "scripts": {
     "start": "node daemon.js",
@@ -22,6 +22,7 @@
     "db:status": "node scripts/knex-init.js status",
     "db:validate": "node scripts/knex-init.js validate",
     "db:test": "node scripts/test-knex-flexibility.js",
+    "fix:supporter-stats": "node scripts/recalculate-supporter-stats.js recalculate",
     "pm2:start": "pm2 start ecosystem.config.js",
     "pm2:stop": "pm2 stop ecosystem.config.js",
     "pm2:restart": "pm2 restart ecosystem.config.js",

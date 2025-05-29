@@ -245,12 +245,15 @@ jobs:
 # Check system status
 npm run health-check
 
+# Validate database integrity
+npm run db:validate
+
+# Validate supporter statistics accuracy
+node scripts/recalculate-supporter-stats.js validate
+
 # View logs
 pm2 logs gofundmepro-sync
 tail -f logs/sync.log
-
-# Database statistics
-node scripts/db-stats.js
 ```
 
 ### Backup Strategy
@@ -266,9 +269,22 @@ mysqldump -u sync_user -p classy_sync > backup-$(date +%Y%m%d).sql
 ### Regular Maintenance
 
 1. **Daily**: Monitor sync jobs and error rates
-2. **Weekly**: Review database growth and performance
+2. **Weekly**: Review database growth and performance, validate supporter statistics
 3. **Monthly**: Update dependencies and security patches
 4. **Quarterly**: Full system backup and disaster recovery test
+
+### Data Integrity Maintenance
+
+```bash
+# Validate supporter lifetime calculations
+node scripts/recalculate-supporter-stats.js validate
+
+# Fix supporter statistics if discrepancies found
+npm run fix:supporter-stats
+
+# Validate database schema integrity
+npm run db:validate
+```
 
 ## Sync Scheduling
 
@@ -351,6 +367,18 @@ REQUIRE SSL;
    
    # Adjust PM2 memory limit
    pm2 restart gofundmepro-sync --max-memory-restart 512M
+   ```
+
+4. **Supporter Statistics Issues**
+   ```bash
+   # Check for data discrepancies
+   node scripts/recalculate-supporter-stats.js validate
+   
+   # Fix incorrect lifetime calculations
+   npm run fix:supporter-stats
+   
+   # Validate supporter_summary view is working
+   npm run db:validate
    ```
 
 ### Log Analysis
