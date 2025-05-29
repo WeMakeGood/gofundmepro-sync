@@ -268,11 +268,12 @@ class MailChimpSyncPlugin extends BasePlugin {
     logger.info('Starting full MailChimp sync');
 
     try {
-      // Get all supporters with email addresses
+      // Get all supporters with email addresses who have consented to email contact
       const query = `
         SELECT * FROM supporter_summary 
         WHERE email_address IS NOT NULL 
         AND email_address != ''
+        AND email_opt_in = 1
         ORDER BY lifetime_donation_amount DESC
       `;
       
@@ -306,6 +307,7 @@ class MailChimpSyncPlugin extends BasePlugin {
         SELECT * FROM supporter_summary 
         WHERE email_address IS NOT NULL 
         AND email_address != ''
+        AND email_opt_in = 1
         AND last_sync_at >= ?
         ORDER BY last_sync_at DESC
       `;

@@ -33,10 +33,11 @@ async function runMailChimpFullSync() {
       SELECT 
         COUNT(*) as total_supporters,
         COUNT(CASE WHEN email_address IS NOT NULL AND email_address != '' THEN 1 END) as with_email,
-        COUNT(CASE WHEN email_address IS NOT NULL AND lifetime_donation_amount > 0 THEN 1 END) as donors_with_email,
-        SUM(CASE WHEN email_address IS NOT NULL THEN lifetime_donation_amount ELSE 0 END) as total_value_with_email,
-        COUNT(CASE WHEN email_address IS NOT NULL AND active_recurring_plans > 0 THEN 1 END) as recurring_with_email,
-        SUM(CASE WHEN email_address IS NOT NULL THEN monthly_recurring_amount ELSE 0 END) as total_monthly_recurring
+        COUNT(CASE WHEN email_address IS NOT NULL AND email_address != '' AND email_opt_in = 1 THEN 1 END) as email_consented,
+        COUNT(CASE WHEN email_address IS NOT NULL AND email_opt_in = 1 AND lifetime_donation_amount > 0 THEN 1 END) as donors_with_consent,
+        SUM(CASE WHEN email_address IS NOT NULL AND email_opt_in = 1 THEN lifetime_donation_amount ELSE 0 END) as total_value_consented,
+        COUNT(CASE WHEN email_address IS NOT NULL AND email_opt_in = 1 AND active_recurring_plans > 0 THEN 1 END) as recurring_consented,
+        SUM(CASE WHEN email_address IS NOT NULL AND email_opt_in = 1 THEN monthly_recurring_amount ELSE 0 END) as total_monthly_recurring_consented
       FROM supporter_summary
     `;
     
@@ -46,10 +47,11 @@ async function runMailChimpFullSync() {
     console.log('📈 Sync Statistics:');
     console.log(`   Total supporters: ${stat.total_supporters.toLocaleString()}`);
     console.log(`   With email addresses: ${stat.with_email.toLocaleString()}`);
-    console.log(`   Donors with email: ${stat.donors_with_email.toLocaleString()}`);
-    console.log(`   Total value (with email): $${stat.total_value_with_email.toLocaleString()}`);
-    console.log(`   Recurring donors: ${stat.recurring_with_email.toLocaleString()}`);
-    console.log(`   Monthly recurring: $${stat.total_monthly_recurring.toLocaleString()}`);
+    console.log(`   Email consented: ${stat.email_consented.toLocaleString()} (${Math.round(stat.email_consented/stat.with_email*100)}% of emails)`);
+    console.log(`   Donors with consent: ${stat.donors_with_consent.toLocaleString()}`);
+    console.log(`   Total value (consented): $${stat.total_value_consented.toLocaleString()}`);
+    console.log(`   Recurring donors (consented): ${stat.recurring_consented.toLocaleString()}`);
+    console.log(`   Monthly recurring (consented): $${stat.total_monthly_recurring_consented.toLocaleString()}`);
     console.log('');
 
     if (dryRun) {
@@ -83,6 +85,7 @@ async function runMailChimpFullSync() {
       SELECT * FROM supporter_summary 
       WHERE email_address IS NOT NULL 
       AND email_address != ''
+      AND email_opt_in = 1
       ORDER BY lifetime_donation_amount DESC
     `;
     
