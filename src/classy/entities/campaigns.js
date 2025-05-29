@@ -99,8 +99,8 @@ class CampaignSync {
       name,
       status,
       goal,
-      total_raised,
-      donor_count,
+      total_raised = null,
+      donor_count = null,
       type, // campaign_type is called 'type' in API
       started_at, // start_date is called 'started_at' in API
       ended_at, // end_date is called 'ended_at' in API
@@ -139,6 +139,13 @@ class CampaignSync {
         last_sync_at = VALUES(last_sync_at)
     `;
 
+    // Helper function to convert timestamp to MySQL format
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      // Convert "2020-01-09T18:13:11+0000" to "2020-01-09 18:13:11"
+      return timestamp.replace(/T/, ' ').replace(/\+\d{4}$/, '').replace(/Z$/, '');
+    };
+
     const params = [
       id,
       localOrganizationId,
@@ -148,12 +155,12 @@ class CampaignSync {
       total_raised,
       donor_count,
       type, // campaign_type
-      started_at, // start_date
-      ended_at, // end_date
+      formatTimestamp(started_at), // start_date
+      formatTimestamp(ended_at), // end_date
       JSON.stringify({}), // custom_fields - not available in basic API response
-      created_at,
-      updated_at,
-      new Date().toISOString()
+      formatTimestamp(created_at),
+      formatTimestamp(updated_at),
+      formatTimestamp(new Date().toISOString())
     ];
 
     await db.query(query, params);

@@ -46,14 +46,28 @@ class MigrationRunner {
   }
 
   async ensureMigrationsTable() {
-    const createTableSQL = `
-      CREATE TABLE IF NOT EXISTS migrations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        version VARCHAR(20) UNIQUE NOT NULL,
-        name VARCHAR(255),
-        applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+    const dbType = process.env.DB_TYPE || 'sqlite';
+    
+    let createTableSQL;
+    if (dbType === 'mysql') {
+      createTableSQL = `
+        CREATE TABLE IF NOT EXISTS migrations (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          version VARCHAR(20) UNIQUE NOT NULL,
+          name VARCHAR(255),
+          applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+    } else {
+      createTableSQL = `
+        CREATE TABLE IF NOT EXISTS migrations (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          version VARCHAR(20) UNIQUE NOT NULL,
+          name VARCHAR(255),
+          applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+      `;
+    }
     
     await this.db.query(createTableSQL);
   }
@@ -137,10 +151,19 @@ class MigrationRunner {
         }
         
         // Record migration as applied (if not already recorded)
-        const recordSQL = `
-          INSERT OR IGNORE INTO migrations (version, name) 
-          VALUES (?, ?)
-        `;
+        const dbType = process.env.DB_TYPE || 'sqlite';
+        let recordSQL;
+        if (dbType === 'mysql') {
+          recordSQL = `
+            INSERT IGNORE INTO migrations (version, name) 
+            VALUES (?, ?)
+          `;
+        } else {
+          recordSQL = `
+            INSERT OR IGNORE INTO migrations (version, name) 
+            VALUES (?, ?)
+          `;
+        }
         await this.db.query(recordSQL, [migration.version, migration.name]);
         
         // Commit transaction
