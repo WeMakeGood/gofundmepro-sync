@@ -155,14 +155,21 @@ class SupporterSync {
         sync_status = ${db.type === 'sqlite' ? 'excluded.sync_status' : 'VALUES(sync_status)'}
     `;
 
+    // Helper function to convert timestamp to MySQL format
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      // Convert "2020-01-09T18:13:11+0000" to "2020-01-09 18:13:11"
+      return timestamp.replace(/T/, ' ').replace(/\+\d{4}$/, '').replace(/Z$/, '');
+    };
+
     const params = [
       id,
       email_address,
       first_name,
       last_name,
       phone,
-      address1,
-      address2,
+      address1, // address_line1
+      address2, // address_line2
       city,
       state,
       postal_code,
@@ -172,14 +179,14 @@ class SupporterSync {
       null, // first_donation_date - will be calculated from transactions
       null, // last_donation_date - will be calculated from transactions
       JSON.stringify({}), // custom_fields - not available in basic supporter response
-      opt_in, // email_opt_in
-      sms_opt_in, // sms_opt_in
-      last_email_consent_decision_date, // last_email_consent_date
-      last_sms_consent_decision_date, // last_sms_consent_date
-      last_emailed_at, // last_emailed_at
-      created_at,
-      updated_at,
-      new Date().toISOString(),
+      opt_in || null, // email_opt_in
+      sms_opt_in || null, // sms_opt_in
+      formatTimestamp(last_email_consent_decision_date), // last_email_consent_date
+      formatTimestamp(last_sms_consent_decision_date), // last_sms_consent_date
+      formatTimestamp(last_emailed_at), // last_emailed_at
+      formatTimestamp(created_at),
+      formatTimestamp(updated_at),
+      formatTimestamp(new Date().toISOString()),
       'synced'
     ];
 

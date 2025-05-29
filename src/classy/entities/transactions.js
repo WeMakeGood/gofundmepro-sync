@@ -234,6 +234,13 @@ class TransactionSync {
         last_sync_at = ${db.type === 'sqlite' ? 'excluded.last_sync_at' : 'VALUES(last_sync_at)'}
     `;
 
+    // Helper function to convert timestamp to MySQL format
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      // Convert "2020-01-09T18:13:11+0000" to "2020-01-09 18:13:11"
+      return timestamp.replace(/T/, ' ').replace(/\+\d{4}$/, '').replace(/Z$/, '');
+    };
+
     const params = [
       id,
       localSupporterId,
@@ -246,13 +253,13 @@ class TransactionSync {
       feeAmount,
       netAmount,
       currency_code,
-      purchased_at,
-      refunded_at,
+      formatTimestamp(purchased_at),
+      formatTimestamp(refunded_at),
       JSON.stringify({}), // custom_fields - not available in this API response
       JSON.stringify({}), // question_responses - not available in this API response  
-      created_at,
-      updated_at,
-      new Date().toISOString()
+      formatTimestamp(created_at),
+      formatTimestamp(updated_at),
+      formatTimestamp(new Date().toISOString())
     ];
 
     await db.query(query, params);
