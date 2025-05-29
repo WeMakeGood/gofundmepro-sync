@@ -13,9 +13,11 @@ This project creates a read-only data synchronization system that maintains a lo
 ### Technology Stack
 - **Runtime**: Node.js (latest LTS version)
 - **Language**: JavaScript (ES6+) - no TypeScript to avoid complexity
-- **Database**: 
+- **Database**: Universal support via Knex.js
   - SQLite for development/small deployments
   - MySQL for production environments
+  - PostgreSQL as alternative production option
+- **ORM/Query Builder**: Knex.js for cross-database compatibility
 - **Queue Management**: Redis with BullMQ for job processing
 - **Process Management**: PM2 for daemon deployment
 - **HTTP Client**: Axios for API requests with built-in retry logic
@@ -77,12 +79,14 @@ This project creates a read-only data synchronization system that maintains a lo
 
 ## Database Schema Design
 
-### Core Tables
+**Note**: The system now uses **Knex.js** for universal database compatibility. Schema is defined in `knex_migrations/` with automatic syntax translation for different database types.
+
+### Core Tables (Knex.js Managed)
 
 ```sql
--- Supporters (Donors)
+-- Supporters (Donors) - Auto-generated from Knex migration
 CREATE TABLE supporters (
-    id INTEGER PRIMARY KEY,
+    id INT AUTO_INCREMENT PRIMARY KEY,  -- MySQL syntax (auto-converted)
     classy_id VARCHAR(255) UNIQUE NOT NULL,
     email_address VARCHAR(255),
     first_name VARCHAR(100),
@@ -289,7 +293,8 @@ class ClassyPaginator {
 project-root/
 ├── src/
 │   ├── core/
-│   │   ├── database.js          # Database connection management
+│   │   ├── knex-database.js     # Universal database abstraction (Knex.js)
+│   │   ├── database.js          # Legacy database layer (deprecated)
 │   │   ├── sync-engine.js       # Main synchronization orchestrator
 │   │   ├── scheduler.js         # Cron job management
 │   │   └── plugin-loader.js     # Dynamic plugin loading
@@ -313,12 +318,16 @@ project-root/
 │   └── config/
 │       ├── database.js          # Database configurations
 │       └── plugins.js           # Plugin configurations
-├── migrations/                  # Database migrations
-├── tests/                       # Test suites
-├── scripts/                     # Utility scripts
-│   ├── init-db.js              # Database initialization
-│   └── manual-sync.js          # Manual sync trigger
-└── daemon.js                   # Main daemon entry point
+├── knex_migrations/            # Universal database migrations (Knex.js)
+├── knex_seeds/                 # Database seed files
+├── migrations/                 # Legacy migrations (deprecated)
+├── tests/                      # Test suites
+├── scripts/                    # Utility scripts
+│   ├── knex-init.js           # Modern database management
+│   ├── init-db.js             # Legacy database initialization (deprecated)
+│   └── manual-sync.js         # Manual sync trigger
+├── knexfile.js                # Database configuration
+└── daemon.js                  # Main daemon entry point
 ```
 
 ### Plugin System
@@ -432,14 +441,16 @@ CLASSY_CLIENT_ID=your_client_id
 CLASSY_CLIENT_SECRET=your_client_secret
 CLASSY_API_BASE_URL=https://api.classy.org
 
-# Database
-DB_TYPE=sqlite # or mysql
-DB_PATH=./data/classy.db # for sqlite
-DB_HOST=localhost # for mysql
+# Database (Knex.js configuration)
+DB_TYPE=sqlite # sqlite, mysql, or pg (PostgreSQL)
+# For SQLite: file created automatically at ./data/dev_database.sqlite
+# For MySQL:
+DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=classy_sync
 DB_USER=sync_user
 DB_PASSWORD=secure_password
+# For PostgreSQL: same as MySQL but DB_TYPE=pg
 
 # Redis Queue
 REDIS_HOST=localhost

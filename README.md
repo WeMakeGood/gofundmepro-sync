@@ -9,14 +9,14 @@ A comprehensive data synchronization system that maintains a local shadow copy o
 - **MailChimp Integration** - Automatic sync with intelligent tagging
 - **Incremental & Full Sync** - Efficient data updates with fallback options
 - **Production Ready** - Robust error handling, logging, and monitoring
-- **Multi-Database Support** - SQLite for development, MySQL for production
+- **Universal Database Support** - SQLite, MySQL, PostgreSQL with seamless switching
 
 ## 🏗️ Architecture
 
 ### Core Components
 
 - **Sync Engine** (`src/core/sync-engine.js`) - Main orchestrator for data synchronization
-- **Database Layer** (`src/core/database.js`) - Abstracted database operations
+- **Database Layer** (`src/core/knex-database.js`) - Universal database abstraction with Knex.js
 - **API Client** (`src/classy/api-client.js`) - GoFundMe Pro API wrapper
 - **Entity Sync** (`src/classy/entities/`) - Specialized sync logic for each data type
 - **Plugin System** (`src/plugins/`) - Extensible integrations (MailChimp, reporting)
@@ -35,7 +35,7 @@ GoFundMe Pro API → Local Database → Analytics Views → External Integration
 
 - Node.js 18+ (LTS recommended)
 - GoFundMe Pro API credentials
-- SQLite (included) or MySQL for production
+- Database: SQLite (dev), MySQL (prod), or PostgreSQL
 - Redis (optional, for job queues)
 
 ### Installation
@@ -59,16 +59,22 @@ GoFundMe Pro API → Local Database → Analytics Views → External Integration
 
 4. **Initialize database**
    ```bash
-   node scripts/init-db.js
+   # Complete setup (recommended for new installations)
+   npm run db:setup
+   
+   # Or step by step
+   npm run db:init    # Run migrations
+   npm run db:seed    # Add initial data
+   npm run db:validate # Verify setup
    ```
 
 5. **Run initial sync**
    ```bash
    # Start with a small test
-   node scripts/initial-sync.js --limit=100
+   npm run initial-sync -- --limit=100
    
    # Full sync when ready
-   node scripts/initial-sync.js
+   npm run initial-sync
    ```
 
 ## 📊 Data Synchronization
@@ -194,10 +200,12 @@ Tags are automatically applied with the `Classy-` prefix:
 
 ### Database Configuration
 
+The system uses **Knex.js** for universal database compatibility. Configure your target database:
+
 #### SQLite (Development)
 ```bash
 DB_TYPE=sqlite
-DB_PATH=./data/classy.db
+# SQLite file will be created automatically at ./data/dev_database.sqlite
 ```
 
 #### MySQL (Production)
@@ -208,6 +216,35 @@ DB_PORT=3306
 DB_NAME=classy_sync
 DB_USER=sync_user
 DB_PASSWORD=secure_password
+```
+
+#### PostgreSQL (Alternative Production)
+```bash
+DB_TYPE=pg
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=classy_sync
+DB_USER=sync_user
+DB_PASSWORD=secure_password
+```
+
+### Database Management
+
+```bash
+# Check migration status
+npm run db:status
+
+# Apply pending migrations
+npm run db:init
+
+# Reset and rebuild database
+npm run db:setup
+
+# Validate schema integrity
+npm run db:validate
+
+# Test database flexibility
+npm run db:test
 ```
 
 ## 📈 Monitoring & Logging
@@ -263,6 +300,9 @@ docker-compose up -d
 ```
 src/
 ├── core/           # Core system components
+│   ├── knex-database.js    # Universal database abstraction
+│   ├── sync-engine.js      # Main synchronization orchestrator
+│   └── scheduler.js        # Job scheduling and management
 ├── classy/         # GoFundMe Pro API integration
 ├── integrations/   # Third-party service clients
 ├── plugins/        # Extensible plugin system
@@ -270,8 +310,14 @@ src/
 └── config/         # Configuration management
 
 scripts/            # Utility and management scripts
-migrations/         # Database schema migrations
+├── knex-init.js            # Modern database management
+└── test-knex-flexibility.js # Database compatibility testing
+
+knex_migrations/    # Universal database migrations (Knex.js)
+knex_seeds/        # Database seed files
+migrations/        # Legacy migrations (deprecated)
 tests/             # Test suites
+knexfile.js        # Database configuration
 ```
 
 ### Running Tests

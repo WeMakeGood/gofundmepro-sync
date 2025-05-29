@@ -4,7 +4,7 @@
 
 ### System Requirements
 - **Node.js**: 18+ LTS (recommended: 20.x)
-- **Database**: SQLite (development) or MySQL 8+ (production)
+- **Database**: SQLite (dev), MySQL 8+ (prod), or PostgreSQL 12+ (alternative)
 - **Redis**: 6+ (optional, for job queues)
 - **PM2**: Global installation for process management
 - **Git**: For deployment automation
@@ -32,14 +32,16 @@ cp .env.template .env
 
 ### 2. Database Setup
 
+The system now uses **Knex.js** for universal database compatibility, supporting seamless switching between database types.
+
 #### SQLite (Development/Small Scale)
 ```bash
 # Default configuration - no additional setup needed
 DB_TYPE=sqlite
-DB_PATH=./data/classy.db
+# Database file created automatically at ./data/dev_database.sqlite
 
 # Initialize database
-npm run init-db
+npm run db:setup
 ```
 
 #### MySQL (Production)
@@ -59,8 +61,46 @@ DB_NAME=classy_sync
 DB_USER=sync_user
 DB_PASSWORD=secure_password
 
+# Initialize database with modern Knex system
+npm run db:setup
+```
+
+#### PostgreSQL (Alternative Production)
+```bash
+# Create database
+sudo -u postgres createdb classy_sync
+sudo -u postgres createuser sync_user
+sudo -u postgres psql -c "ALTER USER sync_user WITH PASSWORD 'secure_password';"
+sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE classy_sync TO sync_user;"
+
+# Configure environment
+DB_TYPE=pg
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=classy_sync
+DB_USER=sync_user
+DB_PASSWORD=secure_password
+
 # Initialize database
-npm run init-db
+npm run db:setup
+```
+
+#### Database Management Commands
+```bash
+# Check migration status
+npm run db:status
+
+# Apply pending migrations only
+npm run db:init
+
+# Reset and rebuild completely
+npm run db:setup
+
+# Validate schema integrity
+npm run db:validate
+
+# Test database flexibility
+npm run db:test
 ```
 
 ### 3. Initial Data Sync
@@ -294,9 +334,12 @@ REQUIRE SSL;
 
 2. **Database Connection Issues**
    ```bash
-   # Test database connection
+   # Test database connection with Knex
+   npm run db:test
+   
+   # Or manually test
    node -e "
-   const db = require('./src/core/database');
+   const db = require('./src/core/knex-database');
    db.getInstance().connect().then(() => console.log('Connected'))
    "
    ```
