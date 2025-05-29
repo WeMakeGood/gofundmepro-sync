@@ -1,0 +1,51 @@
+{
+  "name": "gofundmepro-sync",
+  "version": "1.0.0",
+  "description": "Comprehensive data synchronization system for GoFundMe Pro (Classy) with MailChimp integration and advanced donor analytics",
+  "main": "daemon.js",
+  "scripts": {
+    "start": "node daemon.js",
+    "dev": "NODE_ENV=development node daemon.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "lint": "eslint src/",
+    "init-db": "node scripts/init-db.js",
+    "manual-sync": "node scripts/manual-sync.js",
+    "initial-sync": "node scripts/initial-sync.js",
+    "migrate": "node scripts/migrate.js",
+    "mailchimp-sync": "node scripts/mailchimp-full-sync.js",
+    "health-check": "node scripts/health-check.js",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
+    "pm2:logs": "pm2 logs",
+    "deploy:production": "pm2 deploy ecosystem.config.js production",
+    "deploy:staging": "pm2 deploy ecosystem.config.js staging"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:WeMakeGood/gofundmepro-sync.git"
+  },
+  "keywords": ["gofundme", "classy", "donations", "sync", "fundraising", "mailchimp", "donor-analytics"],
+  "author": "We Make Good LLC",
+  "license": "PROPRIETARY",
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bullmq": "^4.15.0",
+    "sqlite3": "^5.1.6",
+    "mysql2": "^3.6.5",
+    "redis": "^4.6.10",
+    "winston": "^3.11.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "eslint": "^8.55.0",
+    "faker": "^5.5.3",
+    "supertest": "^6.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

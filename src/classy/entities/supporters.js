@@ -1,0 +1,331 @@
+const logger = require('../../utils/logger');
+
+class SupporterSync {
+  static async incrementalSync(api, db, params = {}) {
+    const stats = { totalRecords: 0, successfulRecords: 0, failedRecords: 0 };
+    
+    try {
+      const updatedSince = params.updated_since;
+      const batchSize = params.batch_size || 100;
+      
+      logger.info('Starting incremental supporter sync', { updatedSince, batchSize });
+      
+      // Get supporters updated since last sync
+      // Use filter parameter with unencoded ISO8601 date format in +0000 timezone
+      const formattedDate = updatedSince.toISOString().replace(/\.\d{3}Z$/, '+0000');
+      const supporters = await api.getSupporters({
+        filter: `updated_at>${formattedDate}`,
+        per_page: batchSize
+      }, params.organization_id);
+      
+      stats.totalRecords = supporters.length;
+      
+      for (const supporter of supporters) {
+        try {
+          await this.upsertSupporter(db, supporter);
+          stats.successfulRecords++;
+        } catch (error) {
+          stats.failedRecords++;
+          logger.error('Failed to sync supporter:', {
+            supporterId: supporter.id,
+            error: error.message
+          });
+        }
+      }
+      
+      return stats;
+    } catch (error) {
+      logger.error('Incremental supporter sync failed:', error);
+      throw error;
+    }
+  }
+
+  static async fullSync(api, db, params = {}) {
+    const stats = { totalRecords: 0, successfulRecords: 0, failedRecords: 0 };
+    
+    try {
+      const batchSize = params.batch_size || 100;
+      
+      logger.info('Starting full supporter sync', { batchSize });
+      
+      // Get all supporters
+      const supporters = await api.getSupporters({
+        per_page: batchSize
+      }, params.organization_id);
+      
+      stats.totalRecords = supporters.length;
+      
+      for (const supporter of supporters) {
+        try {
+          await this.upsertSupporter(db, supporter);
+          stats.successfulRecords++;
+        } catch (error) {
+          stats.failedRecords++;
+          logger.error('Failed to sync supporter:', {
+            supporterId: supporter.id,
+            error: error.message
+          });
+        }
+      }
+      
+      return stats;
+    } catch (error) {
+      logger.error('Full supporter sync failed:', error);
+      throw error;
+    }
+  }
+
+  static async syncSingle(api, db, supporterId) {
+    try {
+      logger.info('Syncing single supporter', { supporterId });
+      
+      const supporter = await api.getSupporter(supporterId);
+      await this.upsertSupporter(db, supporter);
+      
+      return { success: true, supporterId };
+    } catch (error) {
+      logger.error('Single supporter sync failed:', {
+        supporterId,
+        error: error.message
+      });
+      throw error;
+    }
+  }
+
+  static async upsertSupporter(db, supporterData) {
+    const {
+      id,
+      email_address,
+      first_name,
+      last_name,
+      phone,
+      address1,
+      address2,
+      city,
+      state,
+      postal_code,
+      country,
+      // Consent and communication fields
+      opt_in,
+      sms_opt_in,
+      last_email_consent_decision_date,
+      last_sms_consent_decision_date,
+      last_emailed_at,
+      // Note: lifetime stats aren't provided by the supporter API
+      // These will be calculated from transactions
+      created_at,
+      updated_at
+    } = supporterData;
+    
+    const query = `
+      INSERT INTO supporters (
+        classy_id, email_address, first_name, last_name, phone,
+        address_line1, address_line2, city, state, postal_code, country,
+        lifetime_donation_amount, lifetime_donation_count,
+        first_donation_date, last_donation_date, custom_fields,
+        email_opt_in, sms_opt_in, last_email_consent_date, last_sms_consent_date, last_emailed_at,
+        created_at, updated_at, last_sync_at, sync_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ${db.type === 'sqlite' ? 
+        'ON CONFLICT(classy_id) DO UPDATE SET' : 
+        'ON DUPLICATE KEY UPDATE'
+      }
+        email_address = ${db.type === 'sqlite' ? 'excluded.email_address' : 'VALUES(email_address)'},
+        first_name = ${db.type === 'sqlite' ? 'excluded.first_name' : 'VALUES(first_name)'},
+        last_name = ${db.type === 'sqlite' ? 'excluded.last_name' : 'VALUES(last_name)'},
+        phone = ${db.type === 'sqlite' ? 'excluded.phone' : 'VALUES(phone)'},
+        address_line1 = ${db.type === 'sqlite' ? 'excluded.address_line1' : 'VALUES(address_line1)'},
+        address_line2 = ${db.type === 'sqlite' ? 'excluded.address_line2' : 'VALUES(address_line2)'},
+        city = ${db.type === 'sqlite' ? 'excluded.city' : 'VALUES(city)'},
+        state = ${db.type === 'sqlite' ? 'excluded.state' : 'VALUES(state)'},
+        postal_code = ${db.type === 'sqlite' ? 'excluded.postal_code' : 'VALUES(postal_code)'},
+        country = ${db.type === 'sqlite' ? 'excluded.country' : 'VALUES(country)'},
+        lifetime_donation_amount = ${db.type === 'sqlite' ? 'excluded.lifetime_donation_amount' : 'VALUES(lifetime_donation_amount)'},
+        lifetime_donation_count = ${db.type === 'sqlite' ? 'excluded.lifetime_donation_count' : 'VALUES(lifetime_donation_count)'},
+        first_donation_date = ${db.type === 'sqlite' ? 'excluded.first_donation_date' : 'VALUES(first_donation_date)'},
+        last_donation_date = ${db.type === 'sqlite' ? 'excluded.last_donation_date' : 'VALUES(last_donation_date)'},
+        custom_fields = ${db.type === 'sqlite' ? 'excluded.custom_fields' : 'VALUES(custom_fields)'},
+        email_opt_in = ${db.type === 'sqlite' ? 'excluded.email_opt_in' : 'VALUES(email_opt_in)'},
+        sms_opt_in = ${db.type === 'sqlite' ? 'excluded.sms_opt_in' : 'VALUES(sms_opt_in)'},
+        last_email_consent_date = ${db.type === 'sqlite' ? 'excluded.last_email_consent_date' : 'VALUES(last_email_consent_date)'},
+        last_sms_consent_date = ${db.type === 'sqlite' ? 'excluded.last_sms_consent_date' : 'VALUES(last_sms_consent_date)'},
+        last_emailed_at = ${db.type === 'sqlite' ? 'excluded.last_emailed_at' : 'VALUES(last_emailed_at)'},
+        updated_at = ${db.type === 'sqlite' ? 'excluded.updated_at' : 'VALUES(updated_at)'},
+        last_sync_at = ${db.type === 'sqlite' ? 'excluded.last_sync_at' : 'VALUES(last_sync_at)'},
+        sync_status = ${db.type === 'sqlite' ? 'excluded.sync_status' : 'VALUES(sync_status)'}
+    `;
+
+    const params = [
+      id,
+      email_address,
+      first_name,
+      last_name,
+      phone,
+      address1,
+      address2,
+      city,
+      state,
+      postal_code,
+      country,
+      null, // lifetime_donation_amount - will be calculated from transactions
+      null, // lifetime_donation_count - will be calculated from transactions
+      null, // first_donation_date - will be calculated from transactions
+      null, // last_donation_date - will be calculated from transactions
+      JSON.stringify({}), // custom_fields - not available in basic supporter response
+      opt_in, // email_opt_in
+      sms_opt_in, // sms_opt_in
+      last_email_consent_decision_date, // last_email_consent_date
+      last_sms_consent_decision_date, // last_sms_consent_date
+      last_emailed_at, // last_emailed_at
+      created_at,
+      updated_at,
+      new Date().toISOString(),
+      'synced'
+    ];
+
+    await db.query(query, params);
+    
+    logger.debug('Supporter upserted', { supporterId: id });
+  }
+
+  static async getSupporterByClassyId(db, classyId) {
+    const query = 'SELECT * FROM supporters WHERE classy_id = ?';
+    const result = await db.query(query, [classyId]);
+    return result.length > 0 ? result[0] : null;
+  }
+
+  // Consent and CRM integration methods
+  static async getEmailOptedInSupporters(db, limit = null) {
+    let query = `
+      SELECT id, classy_id, email_address, first_name, last_name, 
+             last_email_consent_date, last_emailed_at
+      FROM supporters 
+      WHERE email_opt_in = 1 
+      ORDER BY last_email_consent_date DESC
+    `;
+    
+    if (limit) {
+      query += ` LIMIT ${limit}`;
+    }
+    
+    return await db.query(query);
+  }
+
+  static async getSMSOptedInSupporters(db, limit = null) {
+    let query = `
+      SELECT id, classy_id, phone, first_name, last_name,
+             last_sms_consent_date
+      FROM supporters 
+      WHERE sms_opt_in = 1 AND phone IS NOT NULL AND LENGTH(phone) > 0
+      ORDER BY last_sms_consent_date DESC
+    `;
+    
+    if (limit) {
+      query += ` LIMIT ${limit}`;
+    }
+    
+    return await db.query(query);
+  }
+
+  static async getConsentStats(db) {
+    const query = `
+      SELECT 
+        COUNT(*) as total_supporters,
+        COUNT(CASE WHEN email_opt_in = 1 THEN 1 END) as email_opted_in,
+        COUNT(CASE WHEN email_opt_in = 0 THEN 1 END) as email_opted_out,
+        COUNT(CASE WHEN sms_opt_in = 1 THEN 1 END) as sms_opted_in,
+        COUNT(CASE WHEN sms_opt_in = 0 THEN 1 END) as sms_opted_out,
+        COUNT(CASE WHEN last_email_consent_date IS NOT NULL THEN 1 END) as have_email_consent_date,
+        COUNT(CASE WHEN last_sms_consent_date IS NOT NULL THEN 1 END) as have_sms_consent_date
+      FROM supporters
+    `;
+    
+    const result = await db.query(query);
+    return result.length > 0 ? result[0] : null;
+  }
+
+  static async getSupportersForCRM(db, options = {}) {
+    const {
+      emailOptIn = null,
+      smsOptIn = null,
+      hasEmail = true,
+      hasPhone = false,
+      minDonationAmount = null,
+      limit = null
+    } = options;
+
+    let query = `
+      SELECT 
+        s.id, s.classy_id, s.email_address, s.first_name, s.last_name, s.phone,
+        s.email_opt_in, s.sms_opt_in, s.last_email_consent_date, s.last_sms_consent_date,
+        s.lifetime_donation_amount, s.lifetime_donation_count, s.last_donation_date,
+        s.created_at, s.updated_at
+      FROM supporters s
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    
+    if (hasEmail) {
+      query += ' AND s.email_address IS NOT NULL AND LENGTH(s.email_address) > 0';
+    }
+    
+    if (hasPhone) {
+      query += ' AND s.phone IS NOT NULL AND LENGTH(s.phone) > 0';
+    }
+    
+    if (emailOptIn !== null) {
+      query += ' AND s.email_opt_in = ?';
+      params.push(emailOptIn ? 1 : 0);
+    }
+    
+    if (smsOptIn !== null) {
+      query += ' AND s.sms_opt_in = ?';
+      params.push(smsOptIn ? 1 : 0);
+    }
+    
+    if (minDonationAmount !== null) {
+      query += ' AND s.lifetime_donation_amount >= ?';
+      params.push(minDonationAmount);
+    }
+    
+    query += ' ORDER BY s.lifetime_donation_amount DESC, s.last_donation_date DESC';
+    
+    if (limit) {
+      query += ` LIMIT ${limit}`;
+    }
+    
+    return await db.query(query, params);
+  }
+
+  static async getSupporterByEmail(db, email) {
+    const query = 'SELECT * FROM supporters WHERE email_address = ?';
+    const result = await db.query(query, [email]);
+    return result.length > 0 ? result[0] : null;
+  }
+
+  static async updateSupporterStats(db, supporterId, stats) {
+    const query = `
+      UPDATE supporters 
+      SET lifetime_donation_amount = ?,
+          lifetime_donation_count = ?,
+          last_donation_date = ?,
+          updated_at = ?,
+          last_sync_at = ?
+      WHERE id = ?
+    `;
+    
+    const params = [
+      stats.lifetime_donation_amount,
+      stats.lifetime_donation_count,
+      stats.last_donation_date,
+      new Date().toISOString(),
+      new Date().toISOString(),
+      supporterId
+    ];
+
+    await db.query(query, params);
+  }
+}
+
+module.exports = SupporterSync;
