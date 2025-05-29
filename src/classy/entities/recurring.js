@@ -210,6 +210,20 @@ class RecurringPlanSync {
         last_sync_at = ${db.type === 'sqlite' ? 'excluded.last_sync_at' : 'VALUES(last_sync_at)'}
     `;
 
+    // Helper function to convert timestamp to MySQL format
+    const formatTimestamp = (timestamp) => {
+      if (!timestamp) return null;
+      // Convert "2020-01-09T18:13:11+0000" to "2020-01-09 18:13:11"
+      return timestamp.replace(/T/, ' ').replace(/\+\d{4}$/, '').replace(/Z$/, '');
+    };
+
+    // Helper function to convert date to MySQL format
+    const formatDate = (dateString) => {
+      if (!dateString) return null;
+      // Convert "2024-01-15" or "2024-01-15T00:00:00+0000" to "2024-01-15"
+      return dateString.split('T')[0];
+    };
+
     const params = [
       id,
       localSupporterId,
@@ -218,14 +232,14 @@ class RecurringPlanSync {
       frequency,
       donation_amount,
       currency_code,
-      next_processing_date,
-      canceled_at,
+      formatDate(next_processing_date), // next_payment_date is DATE type
+      formatTimestamp(canceled_at), // cancellation_date is TIMESTAMP type
       cancel_reason_text,
       null, // lifetime_value - not available in API
       null, // payment_count - not available in API
-      created_at,
-      updated_at,
-      new Date().toISOString()
+      formatTimestamp(created_at),
+      formatTimestamp(updated_at),
+      formatTimestamp(new Date().toISOString())
     ];
 
     await db.query(query, params);
