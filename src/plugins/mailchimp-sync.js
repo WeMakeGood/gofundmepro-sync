@@ -24,7 +24,12 @@ class MailChimpSyncPlugin extends BasePlugin {
       // Validate access
       const validation = await this.client.validateAccess();
       if (!validation.valid) {
-        throw new Error(`MailChimp access validation failed: ${validation.error}`);
+        // Log the error but don't fail initialization - allows system to continue
+        logger.warn('MailChimp access validation failed - plugin will be disabled', { 
+          error: validation.error 
+        });
+        this.enabled = false;
+        return;
       }
 
       logger.info('MailChimp sync plugin initialized', {
@@ -40,8 +45,11 @@ class MailChimpSyncPlugin extends BasePlugin {
       }
 
     } catch (error) {
-      logger.error('Failed to initialize MailChimp sync plugin', { error: error.message });
-      throw error;
+      logger.warn('Failed to initialize MailChimp sync plugin - plugin will be disabled', { 
+        error: error.message 
+      });
+      // Don't throw error - just disable the plugin so system continues
+      this.enabled = false;
     }
   }
 
@@ -116,6 +124,11 @@ class MailChimpSyncPlugin extends BasePlugin {
    * Process supporter data for sync
    */
   async process(data) {
+    if (!this.enabled) {
+      logger.debug('MailChimp plugin is disabled, skipping sync');
+      return;
+    }
+
     try {
       if (data.type === 'supporter.updated') {
         await this.syncSingleSupporter(data.supporter);
@@ -135,7 +148,8 @@ class MailChimpSyncPlugin extends BasePlugin {
         dataType: data.type,
         error: error.message
       });
-      throw error;
+      // Don't re-throw error to avoid disrupting other plugins
+      logger.warn('MailChimp sync error - plugin will continue but may need attention');
     }
   }
 
