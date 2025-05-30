@@ -68,6 +68,10 @@ class SupporterSync {
         }
       }
       
+      // After syncing all supporters, recalculate lifetime stats from transactions
+      logger.info('Recalculating supporter lifetime statistics from transactions...');
+      await this.recalculateAllLifetimeStats(db);
+      
       return stats;
     } catch (error) {
       logger.error('Full supporter sync failed:', error);
@@ -332,6 +336,68 @@ class SupporterSync {
     ];
 
     await db.query(query, params);
+  }
+
+  static async recalculateAllLifetimeStats(db) {
+    try {
+      logger.info('Recalculating lifetime statistics for all supporters...');
+      
+      const updateQuery = `
+        UPDATE supporters s
+        SET 
+          lifetime_donation_amount = COALESCE((
+            SELECT SUM(t.gross_amount)
+            FROM transactions t 
+            WHERE t.supporter_id = s.id 
+            AND t.status = 'success'
+            AND t.transaction_type = 'donation'
+          ), 0),
+          lifetime_donation_count = COALESCE((
+            SELECT COUNT(*)
+            FROM transactions t 
+            WHERE t.supporter_id = s.id 
+            AND t.status = 'success'
+            AND t.transaction_type = 'donation'
+          ), 0),
+          first_donation_date = (
+            SELECT MIN(t.purchased_at)
+            FROM transactions t 
+            WHERE t.supporter_id = s.id 
+            AND t.status = 'success'
+            AND t.transaction_type = 'donation'
+          ),
+          last_donation_date = (
+            SELECT MAX(t.purchased_at)
+            FROM transactions t 
+            WHERE t.supporter_id = s.id 
+            AND t.status = 'success'
+            AND t.transaction_type = 'donation'
+          ),
+          last_sync_at = ${db.type === 'mysql' ? 'NOW()' : "datetime('now')"}
+      `;
+      
+      await db.query(updateQuery);
+      
+      // Get update statistics
+      const countResult = await db.query(`
+        SELECT 
+          COUNT(*) as total_supporters,
+          COUNT(CASE WHEN lifetime_donation_amount > 0 THEN 1 END) as supporters_with_donations
+        FROM supporters
+      `);
+      
+      const stats = countResult[0];
+      logger.info('Supporter lifetime statistics recalculated', {
+        totalSupporters: stats.total_supporters,
+        supportersWithDonations: stats.supporters_with_donations
+      });
+      
+      return stats;
+      
+    } catch (error) {
+      logger.error('Failed to recalculate supporter lifetime statistics:', error);
+      throw error;
+    }
   }
 }
 
