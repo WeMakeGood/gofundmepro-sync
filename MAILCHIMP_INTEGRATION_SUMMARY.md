@@ -43,13 +43,13 @@ GoFundMe Pro API → Database Update → Sync Engine → MailChimp Plugin → Ma
 
 ### Environment Variables
 ```bash
-MAILCHIMP_API_KEY=6a24b832a6937dae39262c4a4dee6893-us15
-MAILCHIMP_LIST_ID=06411e98fe
+MAILCHIMP_API_KEY=your_mailchimp_api_key_here-dc
+MAILCHIMP_LIST_ID=your_list_id_here
 MAILCHIMP_SERVER_PREFIX=us15
 ```
 
 ### Plugin Configuration
-- **List**: Unified Audience (06411e98fe)
+- **List**: Target MailChimp audience (configured via MAILCHIMP_LIST_ID)
 - **Sync Mode**: Incremental (triggered by supporter updates)
 - **Batch Size**: 50 supporters per batch
 - **Tag Prefix**: "Classy-"

@@ -7,7 +7,7 @@ class MailChimpSyncPlugin extends BasePlugin {
     super(config, dependencies);
     
     this.apiKey = config.apiKey || process.env.MAILCHIMP_API_KEY;
-    this.listId = config.listId || process.env.MAILCHIMP_LIST_ID || '06411e98fe'; // Default to Unified Audience
+    this.listId = config.listId || process.env.MAILCHIMP_LIST_ID;
     this.syncMode = config.syncMode || 'incremental'; // 'incremental' or 'full'
     this.batchSize = config.batchSize || 100;
     this.tagPrefix = config.tagPrefix || ''; // Optional prefix for all tags

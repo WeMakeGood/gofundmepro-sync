@@ -8,7 +8,7 @@ async function testMailChimpOperations() {
 
   try {
     // Initialize client - use the discovered list ID from exploration
-    const listId = '06411e98fe'; // Unified Audience from our exploration
+    const listId = process.env.MAILCHIMP_LIST_ID; // Target MailChimp audience
     const client = new MailChimpClient(process.env.MAILCHIMP_API_KEY, listId);
 
     // 1. Validate access

@@ -122,14 +122,14 @@ await plugin.process({
 ### Environment Variables
 ```bash
 MAILCHIMP_API_KEY=your-api-key-dc     # Required: MailChimp API key
-MAILCHIMP_LIST_ID=06411e98fe          # Optional: defaults to Unified Audience
+MAILCHIMP_LIST_ID=your_list_id_here   # Required: MailChimp audience list ID
 ```
 
 ### Plugin Configuration
 ```javascript
 const config = {
   apiKey: process.env.MAILCHIMP_API_KEY,
-  listId: '06411e98fe',
+  listId: process.env.MAILCHIMP_LIST_ID,
   syncMode: 'incremental',              // 'incremental' or 'full'
   batchSize: 50,                        // Supporters per batch
   tagPrefix: 'Classy-',                 // Prefix for all tags

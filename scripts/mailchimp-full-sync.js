@@ -63,7 +63,7 @@ async function runMailChimpFullSync() {
     console.log('🔗 Initializing MailChimp sync...');
     const pluginConfig = {
       apiKey: process.env.MAILCHIMP_API_KEY,
-      listId: '06411e98fe', // Unified Audience
+      listId: process.env.MAILCHIMP_LIST_ID, // Target MailChimp audience
       syncMode: 'full',
       batchSize: batchSize,
       tagPrefix: 'Classy-',

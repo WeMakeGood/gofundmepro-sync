@@ -16,7 +16,7 @@ async function testMailChimpSync() {
     // Initialize MailChimp sync plugin
     const pluginConfig = {
       apiKey: process.env.MAILCHIMP_API_KEY,
-      listId: '06411e98fe', // Unified Audience
+      listId: process.env.MAILCHIMP_LIST_ID, // Target MailChimp audience
       syncMode: 'incremental',
       batchSize: 10, // Small batch for testing
       tagPrefix: 'Classy-', // Prefix for all tags

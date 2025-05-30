@@ -87,7 +87,7 @@ class ClassySyncDaemon {
       configs['mailchimp-sync'] = {
         enabled: true,
         apiKey: process.env.MAILCHIMP_API_KEY,
-        listId: process.env.MAILCHIMP_LIST_ID || '06411e98fe',
+        listId: process.env.MAILCHIMP_LIST_ID,
         syncMode: 'incremental',
         batchSize: 50,
         tagPrefix: 'Classy-',
