@@ -5,7 +5,7 @@ require('dotenv').config();
 const SyncEngine = require('./src/core/sync-engine');
 const SyncScheduler = require('./src/core/scheduler');
 const PluginLoader = require('./src/core/plugin-loader');
-const { getInstance: getDatabase } = require('./src/core/database');
+const { getInstance: getDatabase } = require('./src/core/knex-database');
 const logger = require('./src/utils/logger');
 
 class ClassySyncDaemon {
@@ -71,6 +71,9 @@ class ClassySyncDaemon {
       
       await this.pluginLoader.loadAllPlugins();
       logger.info('Plugins loaded');
+      
+      // Connect sync engine with plugin loader for event triggering
+      this.syncEngine.setPluginLoader(this.pluginLoader);
       
     } catch (error) {
       logger.error('Component initialization failed:', error);

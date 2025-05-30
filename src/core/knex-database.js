@@ -47,7 +47,19 @@ class KnexDatabase {
     }
     
     try {
-      return await this.knex.raw(sql, params);
+      const result = await this.knex.raw(sql, params);
+      
+      // Handle different database result formats
+      if (this.knex.client.config.client === 'mysql2' || this.knex.client.config.client === 'mysql') {
+        // MySQL returns [rows, fields] - we want just the rows
+        return result[0];
+      } else if (this.knex.client.config.client === 'sqlite3') {
+        // SQLite returns rows directly
+        return result;
+      } else {
+        // PostgreSQL and others typically return rows directly
+        return result.rows || result;
+      }
     } catch (error) {
       logger.error('Query failed:', { sql, params, error: error.message });
       throw error;
