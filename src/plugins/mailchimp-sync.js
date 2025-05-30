@@ -121,8 +121,14 @@ class MailChimpSyncPlugin extends BasePlugin {
         await this.syncSingleSupporter(data.supporter);
       } else if (data.type === 'supporters.batch') {
         await this.syncSupporterBatch(data.supporters);
-      } else if (data.type === 'sync.full') {
-        await this.performFullSync();
+      } else if (data.type === 'sync.supporters_completed') {
+        // Trigger MailChimp sync when supporter sync completes
+        await this.handleSupporterSyncCompleted(data);
+      } else if (data.type === 'sync.full' || data.type === 'sync.completed') {
+        // Handle full sync completion
+        if (data.entityType === 'supporters' || data.type === 'sync.full') {
+          await this.handleSupporterSyncCompleted(data);
+        }
       }
     } catch (error) {
       logger.error('MailChimp sync processing failed', {
@@ -262,6 +268,31 @@ class MailChimpSyncPlugin extends BasePlugin {
   }
 
   /**
+   * Handle supporter sync completion events
+   */
+  async handleSupporterSyncCompleted(data) {
+    const { syncType, result, params } = data;
+    
+    logger.info('Handling supporter sync completion for MailChimp', {
+      syncType,
+      recordsProcessed: result?.successfulRecords || 0
+    });
+
+    try {
+      if (syncType === 'full') {
+        // For full syncs, sync all email-consented supporters
+        await this.performFullSync();
+      } else if (syncType === 'incremental') {
+        // For incremental syncs, sync recently updated supporters
+        await this.performIncrementalSync(params?.updated_since);
+      }
+    } catch (error) {
+      logger.error('Failed to handle supporter sync completion', { error: error.message });
+      throw error;
+    }
+  }
+
+  /**
    * Perform full sync of all supporters
    */
   async performFullSync() {
@@ -300,9 +331,18 @@ class MailChimpSyncPlugin extends BasePlugin {
    * Sync supporters with recent changes
    */
   async performIncrementalSync(since) {
+    if (!since) {
+      logger.info('No since date provided for incremental sync, skipping MailChimp update');
+      return;
+    }
+
     logger.info('Starting incremental MailChimp sync', { since });
 
     try {
+      // Convert since date to MySQL format if needed
+      const sinceDate = since instanceof Date ? since : new Date(since);
+      const mysqlDatetime = sinceDate.toISOString().replace('T', ' ').replace(/\\.\\d{3}Z$/, '');
+      
       const query = `
         SELECT * FROM supporter_summary 
         WHERE email_address IS NOT NULL 
@@ -312,16 +352,16 @@ class MailChimpSyncPlugin extends BasePlugin {
         ORDER BY last_sync_at DESC
       `;
       
-      const supporters = await this.db.query(query, [since]);
+      const supporters = await this.db.query(query, [mysqlDatetime]);
       
       if (supporters.length === 0) {
-        logger.info('No supporters to sync in incremental update');
+        logger.info('No supporters to sync in incremental update', { since: mysqlDatetime });
         return;
       }
 
       logger.info('Incremental sync: processing supporters', {
         supporterCount: supporters.length,
-        since
+        since: mysqlDatetime
       });
 
       await this.syncSupporterBatch(supporters);

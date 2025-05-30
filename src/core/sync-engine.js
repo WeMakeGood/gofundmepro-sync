@@ -8,7 +8,6 @@ class SyncEngine {
     this.api = new ClassyAPIClient(config.classy);
     this.batchSize = process.env.SYNC_BATCH_SIZE || 100;
     this.entitySyncers = {};
-    this.pluginLoader = null; // Will be set by daemon
     
     this.syncStats = {
       totalRecords: 0,
@@ -76,11 +75,6 @@ class SyncEngine {
         stats: this.syncStats,
         duration: this.syncStats.endTime - this.syncStats.startTime
       });
-
-      // Trigger plugin events for supporter updates to enable MailChimp sync
-      if (entityType === 'supporters' && this.syncStats.successfulRecords > 0) {
-        await this.triggerSupporterSyncEvent(lastSyncTime);
-      }
 
       return this.syncStats;
     } catch (error) {
@@ -253,50 +247,6 @@ class SyncEngine {
       checks,
       timestamp: new Date().toISOString()
     };
-  }
-
-  setPluginLoader(pluginLoader) {
-    this.pluginLoader = pluginLoader;
-  }
-
-  async triggerSupporterSyncEvent(lastSyncTime) {
-    if (!this.pluginLoader) {
-      logger.debug('No plugin loader available, skipping supporter sync event');
-      return;
-    }
-
-    try {
-      // Get recently updated supporters for MailChimp sync
-      const query = `
-        SELECT * FROM supporter_summary 
-        WHERE email_address IS NOT NULL 
-        AND email_address != ''
-        AND email_opt_in = 1
-        AND last_sync_at >= ?
-        ORDER BY last_sync_at DESC
-      `;
-      
-      const updatedSupporters = await this.db.query(query, [lastSyncTime]);
-      
-      if (updatedSupporters.length > 0) {
-        logger.info('Triggering MailChimp sync for updated supporters', {
-          supporterCount: updatedSupporters.length,
-          since: lastSyncTime
-        });
-
-        // Trigger MailChimp sync event
-        await this.pluginLoader.processEvent({
-          type: 'supporters.batch',
-          supporters: updatedSupporters,
-          trigger: 'incremental_sync',
-          timestamp: new Date().toISOString()
-        });
-      } else {
-        logger.debug('No email-consented supporters updated since last sync');
-      }
-    } catch (error) {
-      logger.error('Failed to trigger supporter sync event:', error);
-    }
   }
 
   async shutdown() {

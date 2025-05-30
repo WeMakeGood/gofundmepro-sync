@@ -5,7 +5,7 @@ require('dotenv').config();
 const SyncEngine = require('./src/core/sync-engine');
 const SyncScheduler = require('./src/core/scheduler');
 const PluginLoader = require('./src/core/plugin-loader');
-const { getInstance: getDatabase } = require('./src/core/knex-database');
+const { getInstance: getDatabase } = require('./src/core/database');
 const logger = require('./src/utils/logger');
 
 class ClassySyncDaemon {
@@ -55,25 +55,22 @@ class ClassySyncDaemon {
       await this.syncEngine.initialize();
       logger.info('Sync engine initialized');
       
-      // Initialize scheduler
-      this.scheduler = new SyncScheduler();
-      await this.scheduler.initialize();
-      await this.scheduler.startWorker(this.syncEngine);
-      logger.info('Scheduler initialized');
-      
-      // Initialize plugin loader
+      // Initialize plugin loader first
       this.pluginLoader = new PluginLoader({
         db: this.db,
         logger: logger,
-        queue: this.scheduler.syncQueue,
+        queue: null, // Will be set after scheduler initialization
         plugins: this.getPluginConfigs()
       });
       
       await this.pluginLoader.loadAllPlugins();
       logger.info('Plugins loaded');
       
-      // Connect sync engine with plugin loader for event triggering
-      this.syncEngine.setPluginLoader(this.pluginLoader);
+      // Initialize scheduler with plugin loader
+      this.scheduler = new SyncScheduler();
+      await this.scheduler.initialize();
+      await this.scheduler.startWorker(this.syncEngine, this.pluginLoader);
+      logger.info('Scheduler initialized with plugin integration');
       
     } catch (error) {
       logger.error('Component initialization failed:', error);
@@ -87,10 +84,13 @@ class ClassySyncDaemon {
     
     // MailChimp plugin config
     if (process.env.MAILCHIMP_API_KEY) {
-      configs.mailchimp = {
+      configs['mailchimp-sync'] = {
         enabled: true,
         apiKey: process.env.MAILCHIMP_API_KEY,
-        listId: process.env.MAILCHIMP_LIST_ID,
+        listId: process.env.MAILCHIMP_LIST_ID || '06411e98fe',
+        syncMode: 'incremental',
+        batchSize: 50,
+        tagPrefix: 'Classy-',
         requestsPerSecond: 2 // MailChimp rate limit
       };
     }

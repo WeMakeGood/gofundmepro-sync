@@ -39,7 +39,9 @@ class SyncScheduler {
     }
   }
 
-  async startWorker(syncEngine) {
+  async startWorker(syncEngine, pluginLoader = null) {
+    this.pluginLoader = pluginLoader; // Store plugin loader reference
+    
     this.worker = new Worker('sync-jobs', async (job) => {
       const { type, entityType, params = {} } = job.data;
       
@@ -73,6 +75,11 @@ class SyncScheduler {
           entityType,
           result
         });
+
+        // Trigger plugin events for completed syncs
+        if (this.pluginLoader && result.successfulRecords > 0) {
+          await this.triggerSyncCompletedEvent(entityType, type, result, params);
+        }
 
         return result;
       } catch (error) {
@@ -280,6 +287,44 @@ class SyncScheduler {
         error: error.message,
         timestamp: new Date().toISOString()
       };
+    }
+  }
+
+  async triggerSyncCompletedEvent(entityType, syncType, result, params) {
+    if (!this.pluginLoader) {
+      return;
+    }
+
+    try {
+      // For supporters, trigger MailChimp sync if records were processed
+      if (entityType === 'supporters') {
+        logger.info('Triggering supporter sync completed event for plugins', {
+          entityType,
+          syncType,
+          recordsProcessed: result.successfulRecords
+        });
+
+        await this.pluginLoader.processEvent({
+          type: 'sync.supporters_completed',
+          syncType,
+          result,
+          params,
+          timestamp: new Date().toISOString()
+        });
+      }
+
+      // General sync completed event for all plugins
+      await this.pluginLoader.processEvent({
+        type: 'sync.completed',
+        entityType,
+        syncType,
+        result,
+        params,
+        timestamp: new Date().toISOString()
+      });
+
+    } catch (error) {
+      logger.error('Failed to trigger sync completed event:', error);
     }
   }
 
