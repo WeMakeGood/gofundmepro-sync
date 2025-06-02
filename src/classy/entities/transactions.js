@@ -19,7 +19,7 @@ class TransactionSync {
       // Use the helper method that's already tested and working
       const transactions = await api.getTransactionsSince(updatedSince, {
         per_page: batchSize
-      }, organizationId);
+      }, params.classy_organization_id);
       
       stats.totalRecords = transactions.length;
       
@@ -29,7 +29,7 @@ class TransactionSync {
         try {
           // Extract campaign ID from transaction data
           const campaignId = transaction.campaign?.id || transaction.campaign_id;
-          await this.upsertTransaction(db, transaction, campaignId);
+          await this.upsertTransaction(db, transaction, campaignId, params.organization_id);
           stats.successfulRecords++;
         } catch (error) {
           stats.failedRecords++;
@@ -59,18 +59,20 @@ class TransactionSync {
         organizationId 
       });
       
-      if (organizationId) {
-        // Use organization-level endpoint for full sync
-        const transactions = await api.getTransactions({
-          per_page: batchSize,
+      if (params.classy_organization_id) {
+        // Use direct API call to avoid fetchAll timeout
+        const response = await api.makeRequest('GET', `/2.0/organizations/${params.classy_organization_id}/transactions`, null, {
+          per_page: Math.min(batchSize, 50), // Limit to 50 for full sync
           with: 'items'
-        }, organizationId);
+        });
+        
+        const transactions = response.data || [];
         
         stats.totalRecords = transactions.length;
         
         for (const transaction of transactions) {
           try {
-            await this.upsertTransaction(db, transaction);
+            await this.upsertTransaction(db, transaction, null, params.organization_id);
             stats.successfulRecords++;
           } catch (error) {
             stats.failedRecords++;
@@ -94,7 +96,7 @@ class TransactionSync {
             
             for (const transaction of transactions) {
               try {
-                await this.upsertTransaction(db, transaction, campaignId);
+                await this.upsertTransaction(db, transaction, campaignId, params.organization_id);
                 stats.successfulRecords++;
               } catch (error) {
                 stats.failedRecords++;
@@ -126,7 +128,7 @@ class TransactionSync {
       logger.info('Syncing single transaction', { transactionId });
       
       const transaction = await api.getTransaction(transactionId);
-      await this.upsertTransaction(db, transaction);
+      await this.upsertTransaction(db, transaction, null, null); // syncSingle doesn't have organization context
       
       return { success: true, transactionId };
     } catch (error) {
@@ -138,7 +140,7 @@ class TransactionSync {
     }
   }
 
-  static async upsertTransaction(db, transactionData, campaignId = null) {
+  static async upsertTransaction(db, transactionData, campaignId = null, organizationId = null) {
     const {
       id,
       supporter_id,
@@ -146,7 +148,6 @@ class TransactionSync {
       recurring_donation_plan_id,
       status,
       payment_method,
-      payment_gateway,
       // Use the correct field names from Classy API
       total_gross_amount,
       donation_gross_amount,
@@ -192,34 +193,34 @@ class TransactionSync {
       netAmount = transactionData.items.reduce((sum, item) => sum + (item.donation_net_amount || 0), 0);
     }
 
-    // Get supporter local ID if exists
+    // Get supporter local ID if exists (filter by organization)
     let localSupporterId = null;
-    if (supporter_id) {
-      const supporterQuery = 'SELECT id FROM supporters WHERE classy_id = ?';
-      const supporterResult = await db.query(supporterQuery, [supporter_id]);
+    if (supporter_id && organizationId) {
+      const supporterQuery = 'SELECT id FROM supporters WHERE classy_id = ? AND organization_id = ?';
+      const supporterResult = await db.query(supporterQuery, [supporter_id, organizationId]);
       localSupporterId = supporterResult.length > 0 ? supporterResult[0].id : null;
     }
 
-    // Get local campaign ID - only use if it exists in our database
+    // Get local campaign ID - only use if it exists in our database (filter by organization)
     let localCampaignId = campaignId || campaign_id;
-    if (localCampaignId) {
-      const campaignQuery = 'SELECT id FROM campaigns WHERE classy_id = ?';
-      const campaignResult = await db.query(campaignQuery, [localCampaignId]);
+    if (localCampaignId && organizationId) {
+      const campaignQuery = 'SELECT id FROM campaigns WHERE classy_id = ? AND organization_id = ?';
+      const campaignResult = await db.query(campaignQuery, [localCampaignId, organizationId]);
       localCampaignId = campaignResult.length > 0 ? campaignResult[0].id : null;
     }
     
-    // Get local recurring plan ID if exists
+    // Get local recurring plan ID if exists (filter by organization)
     let localRecurringPlanId = null;
-    if (recurring_donation_plan_id) {
-      const planQuery = 'SELECT id FROM recurring_plans WHERE classy_id = ?';
-      const planResult = await db.query(planQuery, [recurring_donation_plan_id]);
+    if (recurring_donation_plan_id && organizationId) {
+      const planQuery = 'SELECT id FROM recurring_plans WHERE classy_id = ? AND organization_id = ?';
+      const planResult = await db.query(planQuery, [recurring_donation_plan_id, organizationId]);
       localRecurringPlanId = planResult.length > 0 ? planResult[0].id : null;
     }
 
     const query = `
       INSERT INTO transactions (
-        classy_id, supporter_id, campaign_id, recurring_plan_id,
-        transaction_type, status, payment_method, payment_gateway,
+        classy_id, organization_id, supporter_id, campaign_id, recurring_plan_id,
+        transaction_type, status, payment_method,
         gross_amount, fee_amount, net_amount, currency,
         raw_currency_code, raw_total_gross_amount, raw_donation_gross_amount,
         charged_currency_code, charged_total_gross_amount, charged_fees_amount, charged_at,
@@ -239,7 +240,6 @@ class TransactionSync {
         transaction_type = ${db.type === 'sqlite' ? 'excluded.transaction_type' : 'VALUES(transaction_type)'},
         status = ${db.type === 'sqlite' ? 'excluded.status' : 'VALUES(status)'},
         payment_method = ${db.type === 'sqlite' ? 'excluded.payment_method' : 'VALUES(payment_method)'},
-        payment_gateway = ${db.type === 'sqlite' ? 'excluded.payment_gateway' : 'VALUES(payment_gateway)'},
         gross_amount = ${db.type === 'sqlite' ? 'excluded.gross_amount' : 'VALUES(gross_amount)'},
         fee_amount = ${db.type === 'sqlite' ? 'excluded.fee_amount' : 'VALUES(fee_amount)'},
         net_amount = ${db.type === 'sqlite' ? 'excluded.net_amount' : 'VALUES(net_amount)'},
@@ -276,13 +276,13 @@ class TransactionSync {
 
     const params = [
       id,
+      organizationId,
       localSupporterId,
       localCampaignId,
       localRecurringPlanId,
       'donation', // Default transaction type
       status,
       payment_method,
-      payment_gateway,
       grossAmount,
       feeAmount,
       netAmount,

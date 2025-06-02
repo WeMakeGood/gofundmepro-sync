@@ -72,7 +72,8 @@ class SyncEngine {
     const syncType = params.syncType || 'incremental';
     logger.info(`Starting ${syncType} sync for all entities`, { organizationId: this.organizationId });
     
-    const entityTypes = ['campaigns', 'supporters', 'transactions', 'recurring_plans'];
+    // Sync order is critical: organizations > campaigns > supporters > recurring_plans > transactions
+    const entityTypes = ['campaigns', 'supporters', 'recurring_plans', 'transactions'];
     const results = {};
     
     for (const entityType of entityTypes) {

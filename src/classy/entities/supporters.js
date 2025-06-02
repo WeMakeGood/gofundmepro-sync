@@ -19,16 +19,18 @@ class SupporterSync {
       let supporters = [];
       
       try {
-        // Fallback to client-side filtering due to API limitations
-        supporters = await Promise.race([
-          api.getSupporters({
+        // Use direct API call with single page to avoid timeout
+        const response = await Promise.race([
+          api.makeRequest('GET', `/2.0/organizations/${params.classy_organization_id}/supporters`, null, {
             per_page: 5, // Very small batch for slow API
             sort: 'updated_at:desc'
-          }, params.organization_id),
+          }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Supporters API timeout')), 60000) // 60 second timeout
           )
         ]);
+        
+        supporters = response.data || [];
         
         logger.info(`Successfully retrieved ${supporters.length} supporters from slow API`);
         
@@ -62,7 +64,7 @@ class SupporterSync {
       
       for (const supporter of filteredSupporters) {
         try {
-          await this.upsertSupporter(db, supporter);
+          await this.upsertSupporter(db, supporter, params.organization_id);
           stats.successfulRecords++;
         } catch (error) {
           stats.failedRecords++;
@@ -88,16 +90,18 @@ class SupporterSync {
       
       logger.info('Starting full supporter sync', { batchSize });
       
-      // Get all supporters
-      const supporters = await api.getSupporters({
-        per_page: batchSize
-      }, params.organization_id);
+      // Get supporters using direct API call to avoid fetchAll timeout
+      const response = await api.makeRequest('GET', `/2.0/organizations/${params.classy_organization_id}/supporters`, null, {
+        per_page: Math.min(batchSize, 50) // Limit to 50 for full sync
+      });
+      
+      const supporters = response.data || [];
       
       stats.totalRecords = supporters.length;
       
       for (const supporter of supporters) {
         try {
-          await this.upsertSupporter(db, supporter);
+          await this.upsertSupporter(db, supporter, params.organization_id);
           stats.successfulRecords++;
         } catch (error) {
           stats.failedRecords++;
@@ -136,7 +140,7 @@ class SupporterSync {
     }
   }
 
-  static async upsertSupporter(db, supporterData) {
+  static async upsertSupporter(db, supporterData, organizationId) {
     const {
       id,
       email_address,
@@ -163,13 +167,13 @@ class SupporterSync {
     
     const query = `
       INSERT INTO supporters (
-        classy_id, email_address, first_name, last_name, phone,
+        classy_id, organization_id, email_address, first_name, last_name, phone,
         address_line1, address_line2, city, state, postal_code, country,
         lifetime_donation_amount, lifetime_donation_count,
         first_donation_date, last_donation_date, custom_fields,
         email_opt_in, sms_opt_in, last_email_consent_date, last_sms_consent_date, last_emailed_at,
         created_at, updated_at, last_sync_at, sync_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ${db.type === 'sqlite' ? 
         'ON CONFLICT(classy_id) DO UPDATE SET' : 
         'ON DUPLICATE KEY UPDATE'
@@ -208,6 +212,7 @@ class SupporterSync {
 
     const params = [
       id,
+      organizationId,
       email_address,
       first_name,
       last_name,

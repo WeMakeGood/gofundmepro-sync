@@ -68,17 +68,19 @@ class RecurringPlanSync {
         organizationId 
       });
       
-      if (organizationId) {
-        // Use organization-level endpoint for full sync
-        const plans = await api.getRecurringPlans({
-          per_page: batchSize
-        }, organizationId);
+      if (params.classy_organization_id) {
+        // Use direct API call to avoid fetchAll timeout
+        const response = await api.makeRequest('GET', `/2.0/organizations/${params.classy_organization_id}/recurring-donation-plans`, null, {
+          per_page: Math.min(batchSize, 50) // Limit to 50 for full sync
+        });
+        
+        const plans = response.data || [];
         
         stats.totalRecords = plans.length;
         
         for (const plan of plans) {
           try {
-            await this.upsertRecurringPlan(db, plan);
+            await this.upsertRecurringPlan(db, plan, null, params.organization_id);
             stats.successfulRecords++;
           } catch (error) {
             stats.failedRecords++;
@@ -106,7 +108,7 @@ class RecurringPlanSync {
             
             for (const plan of plans) {
               try {
-                await this.upsertRecurringPlan(db, plan, campaignId);
+                await this.upsertRecurringPlan(db, plan, campaignId, params.organization_id);
                 stats.successfulRecords++;
               } catch (error) {
                 stats.failedRecords++;
@@ -150,7 +152,7 @@ class RecurringPlanSync {
     }
   }
 
-  static async upsertRecurringPlan(db, planData, campaignId = null) {
+  static async upsertRecurringPlan(db, planData, campaignId = null, organizationId = null) {
     const {
       id,
       supporter_id,
@@ -169,29 +171,29 @@ class RecurringPlanSync {
       updated_at
     } = planData;
 
-    // Get local supporter ID if exists
+    // Get local supporter ID if exists (filter by organization)
     let localSupporterId = null;
-    if (supporter_id) {
-      const supporterQuery = 'SELECT id FROM supporters WHERE classy_id = ?';
-      const supporterResult = await db.query(supporterQuery, [supporter_id]);
+    if (supporter_id && organizationId) {
+      const supporterQuery = 'SELECT id FROM supporters WHERE classy_id = ? AND organization_id = ?';
+      const supporterResult = await db.query(supporterQuery, [supporter_id, organizationId]);
       localSupporterId = supporterResult.length > 0 ? supporterResult[0].id : null;
     }
 
-    // Get local campaign ID - use from params or from the plan data
+    // Get local campaign ID - use from params or from the plan data (filter by organization)
     let localCampaignId = campaignId || campaign_id;
-    if (localCampaignId) {
-      const campaignQuery = 'SELECT id FROM campaigns WHERE classy_id = ?';
-      const campaignResult = await db.query(campaignQuery, [localCampaignId]);
+    if (localCampaignId && organizationId) {
+      const campaignQuery = 'SELECT id FROM campaigns WHERE classy_id = ? AND organization_id = ?';
+      const campaignResult = await db.query(campaignQuery, [localCampaignId, organizationId]);
       localCampaignId = campaignResult.length > 0 ? campaignResult[0].id : null;
     }
 
     const query = `
       INSERT INTO recurring_plans (
-        classy_id, supporter_id, campaign_id, status, frequency,
+        classy_id, organization_id, supporter_id, campaign_id, status, frequency,
         amount, currency, next_payment_date, cancellation_date,
         cancellation_reason, lifetime_value, payment_count,
         created_at, updated_at, last_sync_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ${db.type === 'sqlite' ? 
         'ON CONFLICT(classy_id) DO UPDATE SET' : 
         'ON DUPLICATE KEY UPDATE'
@@ -227,6 +229,7 @@ class RecurringPlanSync {
 
     const params = [
       id,
+      organizationId,
       localSupporterId,
       localCampaignId,
       status,
