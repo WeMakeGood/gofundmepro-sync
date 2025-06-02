@@ -192,6 +192,21 @@ class ClassyAPIClient {
     return await this.paginator.fetchAll(endpoint, params);
   }
 
+  // Helper method for date-filtered supporters (server-side filtering)
+  async getSupportersSince(sinceDate, params = {}, organizationId = null) {
+    const encodedDate = encodeURIComponent(sinceDate.toISOString());
+    const filterParams = {
+      ...params,
+      filter: `updated_at>${encodedDate}`,
+      sort: 'updated_at:desc'
+    };
+    
+    const endpoint = await this.getOrgScopedEndpoint('/supporters', organizationId);
+    
+    // Use paginator for server-side filtering
+    return await this.paginator.fetchAll(endpoint, filterParams);
+  }
+
   // Transaction methods
   async getCampaignTransactions(campaignId, params = {}, organizationId = null) {
     const endpoint = await this.getOrgScopedEndpoint(`/campaigns/${campaignId}/transactions`, organizationId);
@@ -243,6 +258,21 @@ class ClassyAPIClient {
     return await this.paginator.fetchAll(endpoint, params);
   }
 
+  // Helper method for date-filtered recurring plans (server-side filtering)  
+  async getRecurringPlansSince(sinceDate, params = {}, organizationId = null) {
+    const encodedDate = encodeURIComponent(sinceDate.toISOString());
+    const filterParams = {
+      ...params,
+      filter: `updated_at>${encodedDate}`,
+      sort: 'updated_at:desc'
+    };
+    
+    const endpoint = await this.getOrgScopedEndpoint('/recurring-donation-plans', organizationId);
+    
+    // Use paginator for server-side filtering
+    return await this.paginator.fetchAll(endpoint, filterParams);
+  }
+
   // Campaign methods
   async getCampaign(campaignId, organizationId = null) {
     const endpoint = await this.getOrgScopedEndpoint(`/campaigns/${campaignId}`, organizationId);
@@ -252,6 +282,21 @@ class ClassyAPIClient {
   async getCampaigns(params = {}, organizationId = null) {
     const endpoint = await this.getOrgScopedEndpoint('/campaigns', organizationId);
     return await this.paginator.fetchAll(endpoint, params);
+  }
+
+  // Helper method for date-filtered campaigns (server-side filtering)
+  async getCampaignsSince(sinceDate, params = {}, organizationId = null) {
+    const encodedDate = encodeURIComponent(sinceDate.toISOString());
+    const filterParams = {
+      ...params,
+      filter: `updated_at>${encodedDate}`,
+      sort: 'updated_at:desc'
+    };
+    
+    const endpoint = await this.getOrgScopedEndpoint('/campaigns', organizationId);
+    
+    // Use paginator for server-side filtering
+    return await this.paginator.fetchAll(endpoint, filterParams);
   }
 
   // Organization methods  

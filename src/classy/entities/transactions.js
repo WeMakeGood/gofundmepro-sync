@@ -146,12 +146,34 @@ class TransactionSync {
       recurring_donation_plan_id,
       status,
       payment_method,
+      payment_gateway,
       // Use the correct field names from Classy API
       total_gross_amount,
       donation_gross_amount,
       fees_amount,
       donation_net_amount,
       currency_code,
+      // Raw currency fields (original donor intent)
+      raw_currency_code,
+      raw_total_gross_amount,
+      raw_donation_gross_amount,
+      // Charged currency fields (actual charge)
+      charged_currency_code,
+      charged_total_gross_amount,
+      charged_fees_amount,
+      charged_at,
+      // Relationship fields
+      fundraising_page_id,
+      fundraising_team_id,
+      designation_id,
+      // Fee flags
+      fee_on_top,
+      is_donor_covered_fee,
+      // Payment details
+      payment_type,
+      card_type,
+      card_last_four,
+      // Dates
       purchased_at,
       refunded_at,
       created_at,
@@ -197,11 +219,16 @@ class TransactionSync {
     const query = `
       INSERT INTO transactions (
         classy_id, supporter_id, campaign_id, recurring_plan_id,
-        transaction_type, status, payment_method,
+        transaction_type, status, payment_method, payment_gateway,
         gross_amount, fee_amount, net_amount, currency,
+        raw_currency_code, raw_total_gross_amount, raw_donation_gross_amount,
+        charged_currency_code, charged_total_gross_amount, charged_fees_amount, charged_at,
+        fundraising_page_id, fundraising_team_id, designation_id,
+        fee_on_top, is_donor_covered_fee,
+        payment_type, card_type, card_last_four,
         purchased_at, refunded_at, custom_fields, question_responses,
         created_at, updated_at, last_sync_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ${db.type === 'sqlite' ? 
         'ON CONFLICT(classy_id) DO UPDATE SET' : 
         'ON DUPLICATE KEY UPDATE'
@@ -212,10 +239,26 @@ class TransactionSync {
         transaction_type = ${db.type === 'sqlite' ? 'excluded.transaction_type' : 'VALUES(transaction_type)'},
         status = ${db.type === 'sqlite' ? 'excluded.status' : 'VALUES(status)'},
         payment_method = ${db.type === 'sqlite' ? 'excluded.payment_method' : 'VALUES(payment_method)'},
+        payment_gateway = ${db.type === 'sqlite' ? 'excluded.payment_gateway' : 'VALUES(payment_gateway)'},
         gross_amount = ${db.type === 'sqlite' ? 'excluded.gross_amount' : 'VALUES(gross_amount)'},
         fee_amount = ${db.type === 'sqlite' ? 'excluded.fee_amount' : 'VALUES(fee_amount)'},
         net_amount = ${db.type === 'sqlite' ? 'excluded.net_amount' : 'VALUES(net_amount)'},
         currency = ${db.type === 'sqlite' ? 'excluded.currency' : 'VALUES(currency)'},
+        raw_currency_code = ${db.type === 'sqlite' ? 'excluded.raw_currency_code' : 'VALUES(raw_currency_code)'},
+        raw_total_gross_amount = ${db.type === 'sqlite' ? 'excluded.raw_total_gross_amount' : 'VALUES(raw_total_gross_amount)'},
+        raw_donation_gross_amount = ${db.type === 'sqlite' ? 'excluded.raw_donation_gross_amount' : 'VALUES(raw_donation_gross_amount)'},
+        charged_currency_code = ${db.type === 'sqlite' ? 'excluded.charged_currency_code' : 'VALUES(charged_currency_code)'},
+        charged_total_gross_amount = ${db.type === 'sqlite' ? 'excluded.charged_total_gross_amount' : 'VALUES(charged_total_gross_amount)'},
+        charged_fees_amount = ${db.type === 'sqlite' ? 'excluded.charged_fees_amount' : 'VALUES(charged_fees_amount)'},
+        charged_at = ${db.type === 'sqlite' ? 'excluded.charged_at' : 'VALUES(charged_at)'},
+        fundraising_page_id = ${db.type === 'sqlite' ? 'excluded.fundraising_page_id' : 'VALUES(fundraising_page_id)'},
+        fundraising_team_id = ${db.type === 'sqlite' ? 'excluded.fundraising_team_id' : 'VALUES(fundraising_team_id)'},
+        designation_id = ${db.type === 'sqlite' ? 'excluded.designation_id' : 'VALUES(designation_id)'},
+        fee_on_top = ${db.type === 'sqlite' ? 'excluded.fee_on_top' : 'VALUES(fee_on_top)'},
+        is_donor_covered_fee = ${db.type === 'sqlite' ? 'excluded.is_donor_covered_fee' : 'VALUES(is_donor_covered_fee)'},
+        payment_type = ${db.type === 'sqlite' ? 'excluded.payment_type' : 'VALUES(payment_type)'},
+        card_type = ${db.type === 'sqlite' ? 'excluded.card_type' : 'VALUES(card_type)'},
+        card_last_four = ${db.type === 'sqlite' ? 'excluded.card_last_four' : 'VALUES(card_last_four)'},
         purchased_at = ${db.type === 'sqlite' ? 'excluded.purchased_at' : 'VALUES(purchased_at)'},
         refunded_at = ${db.type === 'sqlite' ? 'excluded.refunded_at' : 'VALUES(refunded_at)'},
         custom_fields = ${db.type === 'sqlite' ? 'excluded.custom_fields' : 'VALUES(custom_fields)'},
@@ -239,10 +282,32 @@ class TransactionSync {
       'donation', // Default transaction type
       status,
       payment_method,
+      payment_gateway,
       grossAmount,
       feeAmount,
       netAmount,
       currency_code,
+      // Raw currency fields
+      raw_currency_code,
+      raw_total_gross_amount,
+      raw_donation_gross_amount,
+      // Charged currency fields
+      charged_currency_code,
+      charged_total_gross_amount,
+      charged_fees_amount,
+      formatTimestamp(charged_at),
+      // Relationship fields
+      fundraising_page_id,
+      fundraising_team_id,
+      designation_id,
+      // Fee flags
+      fee_on_top,
+      is_donor_covered_fee,
+      // Payment details
+      payment_type,
+      card_type,
+      card_last_four,
+      // Dates and metadata
       formatTimestamp(purchased_at),
       formatTimestamp(refunded_at),
       JSON.stringify({}), // custom_fields - not available in this API response

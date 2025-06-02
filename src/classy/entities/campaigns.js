@@ -10,23 +10,22 @@ class CampaignSync {
       
       logger.info('Starting incremental campaign sync', { updatedSince, batchSize });
       
-      // Get campaigns updated since last sync
-      // Use simpler approach due to API filtering issues
-      const campaigns = await api.getCampaigns({
+      // Get campaigns - fallback to client-side filtering due to API limitations
+      const allCampaigns = await api.getCampaigns({
         per_page: Math.min(batchSize, 100),
         sort: 'updated_at:desc'
       }, params.organization_id);
       
       // Filter client-side for campaigns updated since last sync
-      const filteredCampaigns = campaigns.filter(campaign => {
+      const campaigns = allCampaigns.filter(campaign => {
         return new Date(campaign.updated_at) > updatedSince;
       });
       
-      stats.totalRecords = filteredCampaigns.length;
+      stats.totalRecords = campaigns.length;
       
-      logger.info(`Found ${campaigns.length} campaigns, ${filteredCampaigns.length} updated since ${updatedSince}`);
+      logger.info(`Found ${campaigns.length} campaigns updated since ${updatedSince} (client-side filtered from ${allCampaigns.length} total)`);
       
-      for (const campaign of filteredCampaigns) {
+      for (const campaign of campaigns) {
         try {
           await this.upsertCampaign(db, campaign);
           stats.successfulRecords++;
@@ -107,9 +106,9 @@ class CampaignSync {
       goal,
       total_raised = null,
       donor_count = null,
-      type, // campaign_type is called 'type' in API
-      started_at, // start_date is called 'started_at' in API
-      ended_at, // end_date is called 'ended_at' in API
+      type, // API field name (was campaign_type in old schema)
+      started_at, // API field name (was start_date in old schema)  
+      ended_at, // API field name (was end_date in old schema)
       created_at,
       updated_at
     } = campaignData;
@@ -121,13 +120,13 @@ class CampaignSync {
     const query = db.type === 'sqlite' ? `
       INSERT OR REPLACE INTO campaigns (
         classy_id, organization_id, name, status, goal, total_raised,
-        donor_count, campaign_type, start_date, end_date, custom_fields,
+        donor_count, type, started_at, ended_at, custom_fields,
         created_at, updated_at, last_sync_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ` : `
       INSERT INTO campaigns (
         classy_id, organization_id, name, status, goal, total_raised,
-        donor_count, campaign_type, start_date, end_date, custom_fields,
+        donor_count, type, started_at, ended_at, custom_fields,
         created_at, updated_at, last_sync_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
@@ -137,9 +136,9 @@ class CampaignSync {
         goal = VALUES(goal),
         total_raised = VALUES(total_raised),
         donor_count = VALUES(donor_count),
-        campaign_type = VALUES(campaign_type),
-        start_date = VALUES(start_date),
-        end_date = VALUES(end_date),
+        type = VALUES(type),
+        started_at = VALUES(started_at),
+        ended_at = VALUES(ended_at),
         custom_fields = VALUES(custom_fields),
         updated_at = VALUES(updated_at),
         last_sync_at = VALUES(last_sync_at)
@@ -160,9 +159,9 @@ class CampaignSync {
       goal,
       total_raised,
       donor_count,
-      type, // campaign_type
-      formatTimestamp(started_at), // start_date
-      formatTimestamp(ended_at), // end_date
+      type, // API field (was campaign_type column)
+      formatTimestamp(started_at), // API field (was start_date column)
+      formatTimestamp(ended_at), // API field (was end_date column)
       JSON.stringify({}), // custom_fields - not available in basic API response
       formatTimestamp(created_at),
       formatTimestamp(updated_at),

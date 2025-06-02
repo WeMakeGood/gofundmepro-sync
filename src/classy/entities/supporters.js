@@ -19,7 +19,7 @@ class SupporterSync {
       let supporters = [];
       
       try {
-        // Try with even smaller batch and longer timeout for supporters API
+        // Fallback to client-side filtering due to API limitations
         supporters = await Promise.race([
           api.getSupporters({
             per_page: 5, // Very small batch for slow API
@@ -58,7 +58,7 @@ class SupporterSync {
       
       stats.totalRecords = filteredSupporters.length;
       
-      logger.info(`Found ${supporters.length} recent supporters, ${filteredSupporters.length} updated since ${updatedSince}`);
+      logger.info(`Found ${filteredSupporters.length} supporters updated since ${updatedSince} (client-side filtered from ${supporters.length} total)`);
       
       for (const supporter of filteredSupporters) {
         try {
