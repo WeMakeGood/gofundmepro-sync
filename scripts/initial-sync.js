@@ -21,13 +21,13 @@ async function initialFullSync() {
   let totalFailed = 0;
 
   try {
-    const syncEngine = new SyncEngine();
+    // Use organization ID from environment or default to 1 (Eden Projects)
+    const organizationId = process.env.SYNC_ORGANIZATION_ID || 1;
+    
+    const syncEngine = new SyncEngine({ organizationId: parseInt(organizationId) });
     await syncEngine.initialize();
 
-    // Set organization ID (you can make this configurable)
-    const organizationId = 64531; // Eden organization
-
-    console.log(`📋 Syncing data for organization ID: ${organizationId}\n`);
+    console.log(`📋 Syncing data for local organization ID: ${organizationId}\n`);
 
     for (const { entity, description } of syncOrder) {
       console.log(`📥 Syncing ${description}...`);
@@ -36,7 +36,6 @@ async function initialFullSync() {
       
       try {
         const result = await syncEngine.runFullSync(entity, {
-          organization_id: organizationId,
           batch_size: 50 // Smaller batches for initial sync
         });
 

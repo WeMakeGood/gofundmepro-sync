@@ -2,7 +2,7 @@
 
 require('dotenv').config();
 
-const { getInstance: getDatabase } = require('../src/core/database');
+const { getInstance: getDatabase } = require('../src/core/knex-database');
 const logger = require('../src/utils/logger');
 const MigrationRunner = require('./migrate');
 

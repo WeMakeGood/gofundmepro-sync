@@ -5,9 +5,12 @@ const logger = require('../utils/logger');
 class SyncEngine {
   constructor(config = {}) {
     this.db = getDatabase();
-    this.api = new ClassyAPIClient(config.classy);
     this.batchSize = process.env.SYNC_BATCH_SIZE || 100;
     this.entitySyncers = {};
+    this.organizationId = config.organizationId || process.env.SYNC_ORGANIZATION_ID || null;
+    
+    // API client will be initialized in initialize() method with organization-specific credentials
+    this.api = null;
     
     this.syncStats = {
       totalRecords: 0,
@@ -20,8 +23,34 @@ class SyncEngine {
 
   async initialize() {
     await this.db.connect();
+    
+    // Initialize organization-specific API client
+    if (this.organizationId) {
+      this.api = await ClassyAPIClient.createFromDatabase(this.organizationId, this.db);
+      
+      // Get the organization details to find the Classy organization ID
+      const org = await this.db.client('organizations')
+        .where({ id: this.organizationId })
+        .first();
+      
+      if (!org) {
+        throw new Error(`Organization ${this.organizationId} not found`);
+      }
+      
+      this.classyOrganizationId = org.classy_id;
+      
+      logger.info('Sync engine initialized with organization-specific API client', { 
+        organizationId: this.organizationId,
+        classyOrganizationId: this.classyOrganizationId
+      });
+    } else {
+      // Fallback to environment credentials (for backward compatibility)
+      this.api = new ClassyAPIClient();
+      this.classyOrganizationId = process.env.CLASSY_ORGANIZATION_ID;
+      logger.warn('Sync engine initialized without organization ID - using environment credentials');
+    }
+    
     this.loadEntitySyncers();
-    logger.info('Sync engine initialized');
   }
 
   loadEntitySyncers() {
@@ -37,6 +66,33 @@ class SyncEngine {
       logger.warn('Some entity syncers not yet implemented:', error.message);
       this.entitySyncers = {};
     }
+  }
+
+  async syncAll(params = {}) {
+    const syncType = params.syncType || 'incremental';
+    logger.info(`Starting ${syncType} sync for all entities`, { organizationId: this.organizationId });
+    
+    const entityTypes = ['campaigns', 'supporters', 'transactions', 'recurring_plans'];
+    const results = {};
+    
+    for (const entityType of entityTypes) {
+      try {
+        logger.info(`Starting ${syncType} sync for ${entityType}`);
+        
+        if (syncType === 'full') {
+          results[entityType] = await this.runFullSync(entityType, params);
+        } else {
+          results[entityType] = await this.runIncrementalSync(entityType, params);
+        }
+        
+        logger.info(`Completed ${syncType} sync for ${entityType}`, { stats: results[entityType] });
+      } catch (error) {
+        logger.error(`Failed to sync ${entityType}:`, error);
+        results[entityType] = { error: error.message };
+      }
+    }
+    
+    return results;
   }
 
   async runIncrementalSync(entityType, params = {}) {
@@ -56,7 +112,9 @@ class SyncEngine {
       const syncParams = {
         ...params,
         updated_since: lastSyncTime,
-        batch_size: this.batchSize
+        batch_size: this.batchSize,
+        organization_id: this.organizationId,
+        classy_organization_id: this.classyOrganizationId
       };
 
       const result = await syncer.incrementalSync(this.api, this.db, syncParams);
@@ -104,7 +162,9 @@ class SyncEngine {
 
       const syncParams = {
         ...params,
-        batch_size: this.batchSize
+        batch_size: this.batchSize,
+        organization_id: this.organizationId,
+        classy_organization_id: this.classyOrganizationId
       };
 
       const result = await syncer.fullSync(this.api, this.db, syncParams);
@@ -223,13 +283,14 @@ class SyncEngine {
       const query = `
         INSERT INTO sync_jobs (
           job_type, entity_type, status, started_at, completed_at,
-          records_processed, records_failed, metadata
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          records_processed, records_failed, metadata, organization_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `;
       
       const metadata = JSON.stringify({
         batchSize: this.batchSize,
-        duration: this.syncStats.endTime - this.syncStats.startTime
+        duration: this.syncStats.endTime - this.syncStats.startTime,
+        organizationId: this.organizationId
       });
       
       await this.db.query(query, [
@@ -240,7 +301,8 @@ class SyncEngine {
         now,
         this.syncStats.successfulRecords,
         this.syncStats.failedRecords,
-        metadata
+        metadata,
+        this.organizationId
       ]);
     } catch (error) {
       logger.warn('Failed to update sync timestamp:', error);

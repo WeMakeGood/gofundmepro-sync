@@ -7,14 +7,16 @@ class CampaignSync {
     try {
       const updatedSince = params.updated_since;
       const batchSize = params.batch_size || 100;
+      const organizationId = params.organization_id;
+      const classyOrganizationId = params.classy_organization_id;
       
-      logger.info('Starting incremental campaign sync', { updatedSince, batchSize });
+      logger.info('Starting incremental campaign sync', { updatedSince, batchSize, organizationId, classyOrganizationId });
       
       // Get campaigns - fallback to client-side filtering due to API limitations
       const allCampaigns = await api.getCampaigns({
         per_page: Math.min(batchSize, 100),
         sort: 'updated_at:desc'
-      }, params.organization_id);
+      }, classyOrganizationId);
       
       // Filter client-side for campaigns updated since last sync
       const campaigns = allCampaigns.filter(campaign => {
@@ -27,7 +29,7 @@ class CampaignSync {
       
       for (const campaign of campaigns) {
         try {
-          await this.upsertCampaign(db, campaign);
+          await this.upsertCampaign(db, campaign, organizationId);
           stats.successfulRecords++;
         } catch (error) {
           stats.failedRecords++;
@@ -50,19 +52,21 @@ class CampaignSync {
     
     try {
       const batchSize = params.batch_size || 100;
+      const organizationId = params.organization_id;
+      const classyOrganizationId = params.classy_organization_id;
       
-      logger.info('Starting full campaign sync', { batchSize });
+      logger.info('Starting full campaign sync', { batchSize, organizationId, classyOrganizationId });
       
       // Get all campaigns
       const campaigns = await api.getCampaigns({
         per_page: batchSize
-      }, params.organization_id);
+      }, classyOrganizationId);
       
       stats.totalRecords = campaigns.length;
       
       for (const campaign of campaigns) {
         try {
-          await this.upsertCampaign(db, campaign);
+          await this.upsertCampaign(db, campaign, organizationId);
           stats.successfulRecords++;
         } catch (error) {
           stats.failedRecords++;
@@ -97,10 +101,10 @@ class CampaignSync {
     }
   }
 
-  static async upsertCampaign(db, campaignData) {
+  static async upsertCampaign(db, campaignData, organizationId) {
     const {
       id,
-      organization_id,
+      organization_id: apiOrganizationId,
       name,
       status,
       goal,
@@ -113,9 +117,8 @@ class CampaignSync {
       updated_at
     } = campaignData;
 
-    // For now, skip organization foreign key to avoid constraint issues
-    // TODO: Implement proper organization sync first
-    const localOrganizationId = null;
+    // Use the organization_id from sync params (our local organization)
+    const localOrganizationId = organizationId;
 
     const query = db.type === 'sqlite' ? `
       INSERT OR REPLACE INTO campaigns (

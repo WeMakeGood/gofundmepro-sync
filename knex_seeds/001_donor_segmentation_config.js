@@ -6,20 +6,19 @@ exports.seed = async function(knex) {
   // Deletes ALL existing entries
   await knex('donor_segmentation_config').del();
 
-  // Insert Eden Projects organization if it doesn't exist
-  await knex('organizations').insert({
-    classy_id: '64531',
-    name: 'Eden Projects',
-    status: 'active',
-    description: 'Environmental restoration and reforestation organization',
-    created_at: knex.fn.now(),
-    updated_at: knex.fn.now(),
-    last_sync_at: knex.fn.now()
-  }).onConflict('classy_id').ignore();
+  // Note: Organizations should be created via CLI (npm run org:add) 
+  // This seed only creates default segmentation config when organizations exist
+  
+  // Check if any organizations exist, if not skip seeding
+  const orgs = await knex('organizations').select('id');
+  if (orgs.length === 0) {
+    console.log('No organizations found - skipping donor segmentation config seeding');
+    console.log('Use "npm run org:add" to create an organization first');
+    return;
+  }
 
-  // Get organization ID
-  const [org] = await knex('organizations').where('classy_id', '64531').select('id');
-  const orgId = org.id;
+  // Use the first organization for default segmentation config
+  const orgId = orgs[0].id;
 
   // Insert donor value tiers
   await knex('donor_segmentation_config').insert([

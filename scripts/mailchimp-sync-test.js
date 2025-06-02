@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 require('dotenv').config();
-const { Database } = require('../src/core/database');
+const { getInstance: getDatabase } = require('../src/core/knex-database');
 const MailChimpSyncPlugin = require('../src/plugins/mailchimp-sync');
 const logger = require('../src/utils/logger');
 
@@ -10,7 +10,7 @@ async function testMailChimpSync() {
 
   try {
     // Initialize database
-    const db = new Database();
+    const db = getDatabase();
     await db.connect();
 
     // Initialize MailChimp sync plugin

@@ -24,7 +24,13 @@ class KnexInitializer {
       
       // Rollback all migrations (this will drop tables)
       console.log('🗑️  Rolling back all migrations...');
-      await this.db.rollbackMigration();
+      const rolledBack = await this.db.rollbackAllMigrations();
+      
+      if (rolledBack > 0) {
+        console.log(`✅ Rolled back ${rolledBack} migrations`);
+      } else {
+        console.log('ℹ️  No migrations to roll back');
+      }
       
       console.log('🎉 Database reset completed');
       

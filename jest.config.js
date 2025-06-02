@@ -30,7 +30,7 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   
   // Test timeout (increased for database operations)
-  testTimeout: 10000,
+  testTimeout: 30000,
   
   // Verbose output
   verbose: true,

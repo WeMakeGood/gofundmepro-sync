@@ -111,6 +111,27 @@ class KnexDatabase {
     return await this.knex.migrate.rollback();
   }
 
+  async rollbackAllMigrations() {
+    if (!this.connected) {
+      await this.connect();
+    }
+    
+    // Keep rolling back until no more batches exist
+    let rollbackResult;
+    let totalRolledBack = 0;
+    
+    do {
+      rollbackResult = await this.knex.migrate.rollback();
+      if (rollbackResult && rollbackResult[1] && rollbackResult[1].length > 0) {
+        totalRolledBack += rollbackResult[1].length;
+        logger.info(`Rolled back ${rollbackResult[1].length} migrations`);
+      }
+    } while (rollbackResult && rollbackResult[1] && rollbackResult[1].length > 0);
+    
+    logger.info(`Total migrations rolled back: ${totalRolledBack}`);
+    return totalRolledBack;
+  }
+
   async migrationStatus() {
     if (!this.connected) {
       await this.connect();

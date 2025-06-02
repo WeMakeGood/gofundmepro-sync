@@ -13,6 +13,12 @@ exports.up = function(knex) {
   const now = client === 'mysql2' || client === 'mysql' ? 'NOW()' : "datetime('now')";
 
   return Promise.all([
+    // Drop all views first to avoid conflicts
+    knex.raw('DROP VIEW IF EXISTS donor_engagement_distribution'),
+    knex.raw('DROP VIEW IF EXISTS donor_value_distribution'),
+    knex.raw('DROP VIEW IF EXISTS supporter_summary'),
+    knex.raw('DROP VIEW IF EXISTS campaign_performance'),
+    
     // Campaign Performance View
     knex.raw(`
       CREATE VIEW campaign_performance AS

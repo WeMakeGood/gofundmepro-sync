@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 require('dotenv').config();
-const { Database } = require('../src/core/database');
+const { getInstance: getDatabase } = require('../src/core/knex-database');
 const SegmentationManager = require('../src/utils/segmentation');
 
 async function demonstrateSegmentation() {
   console.log('🎯 Donor Segmentation Flexibility Demo\n');
 
   try {
-    const db = new Database();
+    const db = getDatabase();
     await db.connect();
     
     const segmentation = new SegmentationManager(db);

@@ -36,6 +36,7 @@ class ClassyAPIClient {
     this.baseURL = config.baseURL || process.env.CLASSY_API_BASE_URL || 'https://api.classy.org';
     this.clientId = config.clientId || process.env.CLASSY_CLIENT_ID;
     this.clientSecret = config.clientSecret || process.env.CLASSY_CLIENT_SECRET;
+    this.organizationId = config.organizationId || process.env.SYNC_ORGANIZATION_ID;
     
     if (!this.clientId || !this.clientSecret) {
       throw new Error('Classy API credentials are required');
@@ -356,6 +357,58 @@ class ClassyAPIClient {
         circuitBreakerState: this.circuitBreaker.getState()
       };
     }
+  }
+
+  /**
+   * Create an API client for a specific organization with its credentials
+   * @param {number} organizationId - The organization ID
+   * @param {Object} credentials - The decrypted API credentials
+   * @returns {ClassyAPIClient} Configured API client
+   */
+  static async createForOrganization(organizationId, credentials) {
+    if (!credentials.classy_client_id || !credentials.classy_client_secret) {
+      throw new Error(`Organization ${organizationId} missing Classy API credentials`);
+    }
+
+    return new ClassyAPIClient({
+      clientId: credentials.classy_client_id,
+      clientSecret: credentials.classy_client_secret,
+      organizationId: organizationId
+    });
+  }
+
+  /**
+   * Create an API client using organization credentials from database
+   * @param {number} organizationId - The organization ID
+   * @param {Object} db - Database instance
+   * @returns {ClassyAPIClient} Configured API client
+   */
+  static async createFromDatabase(organizationId, db) {
+    const { getInstance: getEncryption } = require('../utils/encryption');
+    const encryption = getEncryption();
+
+    // Get organization with encrypted credentials
+    const org = await db.client('organizations')
+      .where({ id: organizationId })
+      .first();
+
+    if (!org) {
+      throw new Error(`Organization ${organizationId} not found`);
+    }
+
+    if (!org.custom_fields) {
+      throw new Error(`Organization ${organizationId} has no API credentials configured`);
+    }
+
+    const customFields = JSON.parse(org.custom_fields);
+    if (!customFields.api_credentials) {
+      throw new Error(`Organization ${organizationId} has no API credentials configured`);
+    }
+
+    // Decrypt credentials
+    const credentials = encryption.decryptCredentials(customFields.api_credentials);
+
+    return ClassyAPIClient.createForOrganization(organizationId, credentials);
   }
 }
 
