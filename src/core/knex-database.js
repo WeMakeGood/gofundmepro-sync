@@ -137,6 +137,32 @@ class KnexDatabase {
   get client() {
     return this.knex;
   }
+
+  // Health check method
+  async healthCheck() {
+    try {
+      if (!this.connected) {
+        await this.connect();
+      }
+      
+      // Test database connection
+      await this.knex.raw('SELECT 1');
+      
+      return {
+        status: 'ok',
+        connected: this.connected,
+        type: this.type,
+        timestamp: new Date().toISOString()
+      };
+    } catch (error) {
+      return {
+        status: 'error',
+        connected: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
 }
 
 // Singleton instance

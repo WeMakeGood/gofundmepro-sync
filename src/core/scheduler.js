@@ -165,9 +165,10 @@ class SyncScheduler {
 
   async scheduleIncrementalSyncs() {
     const jobs = [
-      { type: 'incremental', entityType: 'transactions' },
+      { type: 'incremental', entityType: 'campaigns' },
+      { type: 'incremental', entityType: 'supporters' },
       { type: 'incremental', entityType: 'recurring_plans' },
-      { type: 'incremental', entityType: 'supporters' }
+      { type: 'incremental', entityType: 'transactions' }
     ];
 
     for (const jobData of jobs) {
