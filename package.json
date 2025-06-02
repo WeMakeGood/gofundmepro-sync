@@ -26,6 +26,7 @@
     "db:test": "node scripts/test-knex-flexibility.js",
     "fix:supporter-stats": "node scripts/recalculate-supporter-stats.js recalculate",
     "org:add": "node scripts/organization-manager.js add",
+    "org:setup": "node scripts/organization-manager.js add",
     "org:list": "node scripts/organization-manager.js list",
     "org:show": "node scripts/organization-manager.js show",
     "org:sync": "node scripts/organization-manager.js sync",

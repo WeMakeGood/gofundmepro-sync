@@ -5,6 +5,7 @@ require('dotenv').config();
 const { getInstance: getKnexDatabase } = require('../src/core/knex-database');
 const { getInstance: getEncryption } = require('../src/utils/encryption');
 const logger = require('../src/utils/logger');
+const readline = require('readline');
 
 class OrganizationManager {
   constructor() {
@@ -284,6 +285,138 @@ class OrganizationManager {
   async close() {
     await this.db.close();
   }
+
+  /**
+   * Interactive wizard for adding organizations
+   */
+  async interactiveAddOrganization() {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    const question = (prompt) => {
+      return new Promise((resolve) => {
+        rl.question(prompt, resolve);
+      });
+    };
+
+    try {
+      console.log('🏢 Interactive Organization Setup Wizard');
+      console.log('==========================================');
+      console.log('This wizard will help you add a new organization to the sync system.');
+      console.log('You\'ll need your Classy API credentials and optionally MailChimp credentials.\n');
+
+      // Required fields
+      const name = await question('📝 Organization Name: ');
+      if (!name.trim()) {
+        throw new Error('Organization name is required');
+      }
+
+      const classyIdInput = await question('🆔 Classy Organization ID: ');
+      const classy_id = parseInt(classyIdInput);
+      if (isNaN(classy_id) || classy_id <= 0) {
+        throw new Error('Valid Classy Organization ID (number) is required');
+      }
+
+      console.log('\n🔑 Classy API Credentials (Required)');
+      console.log('You can find these in your Classy account under API settings.');
+      
+      const classy_client_id = await question('   Client ID: ');
+      if (!classy_client_id.trim()) {
+        throw new Error('Classy Client ID is required');
+      }
+
+      const classy_client_secret = await question('   Client Secret: ');
+      if (!classy_client_secret.trim()) {
+        throw new Error('Classy Client Secret is required');
+      }
+
+      // Optional MailChimp fields
+      console.log('\n📧 MailChimp Integration (Optional)');
+      console.log('Leave blank to skip MailChimp integration for now.');
+      
+      const mailchimp_api_key = await question('   MailChimp API Key (optional): ');
+      let mailchimp_server_prefix = '';
+      let mailchimp_audience_id = '';
+
+      if (mailchimp_api_key.trim()) {
+        mailchimp_server_prefix = await question('   MailChimp Server Prefix (e.g., us15): ');
+        mailchimp_audience_id = await question('   MailChimp Audience ID (optional): ');
+      }
+
+      // Optional organization details
+      console.log('\n📋 Additional Details (Optional)');
+      const description = await question('   Description: ');
+      const website = await question('   Website URL: ');
+
+      // Optional sync settings
+      console.log('\n⚙️ Sync Settings');
+      const autoSyncInput = await question('   Enable automatic sync? (y/N): ');
+      const auto_sync_enabled = autoSyncInput.toLowerCase().startsWith('y');
+
+      let sync_interval_minutes = 60;
+      if (auto_sync_enabled) {
+        const intervalInput = await question('   Sync interval in minutes (default: 60): ');
+        const interval = parseInt(intervalInput);
+        if (!isNaN(interval) && interval > 0) {
+          sync_interval_minutes = interval;
+        }
+      }
+
+      // Summary
+      console.log('\n📋 Configuration Summary:');
+      console.log('=========================');
+      console.log(`Name: ${name}`);
+      console.log(`Classy ID: ${classy_id}`);
+      console.log(`Classy Credentials: ✅ Provided`);
+      console.log(`MailChimp Integration: ${mailchimp_api_key.trim() ? '✅ Enabled' : '❌ Disabled'}`);
+      if (description.trim()) console.log(`Description: ${description}`);
+      if (website.trim()) console.log(`Website: ${website}`);
+      console.log(`Auto Sync: ${auto_sync_enabled ? '✅ Enabled' : '❌ Disabled'}`);
+      if (auto_sync_enabled) console.log(`Sync Interval: ${sync_interval_minutes} minutes`);
+
+      const confirm = await question('\n✅ Create this organization? (Y/n): ');
+      if (confirm.toLowerCase().startsWith('n')) {
+        console.log('❌ Organization creation cancelled.');
+        return;
+      }
+
+      // Create the organization
+      const config = {
+        name: name.trim(),
+        classy_id,
+        classy_client_id: classy_client_id.trim(),
+        classy_client_secret: classy_client_secret.trim(),
+        mailchimp_api_key: mailchimp_api_key.trim() || undefined,
+        mailchimp_server_prefix: mailchimp_server_prefix.trim() || undefined,
+        mailchimp_audience_id: mailchimp_audience_id.trim() || undefined,
+        description: description.trim() || undefined,
+        website: website.trim() || undefined,
+        auto_sync_enabled,
+        sync_interval_minutes
+      };
+
+      console.log('\n🔄 Creating organization...');
+      const orgId = await this.addOrganization(config);
+      
+      console.log('\n🎉 Organization created successfully!');
+      console.log(`\nNext steps:`);
+      console.log(`• View details: npm run org:show ${orgId}`);
+      console.log(`• Start sync: npm run org:sync ${orgId}`);
+      console.log(`• List all orgs: npm run org:list`);
+
+    } catch (error) {
+      if (process.env.NODE_ENV === 'test') {
+        throw error;
+      } else {
+        console.error('\n💥 Setup failed:', error.message);
+        process.exit(1);
+      }
+    } finally {
+      rl.close();
+    }
+  }
 }
 
 // CLI interface
@@ -296,28 +429,34 @@ async function main() {
   try {
     switch (command) {
       case 'add':
-        console.log('🏢 Organization Setup Wizard');
-        console.log('============================');
-        
-        // Get organization details from command line
-        const config = {
-          name: args[1] || 'Eden Projects',
-          classy_id: parseInt(args[2]) || 8580,
-          classy_client_id: args[3],
-          classy_client_secret: args[4],
-          mailchimp_api_key: args[5],
-          mailchimp_server_prefix: args[6],
-          mailchimp_audience_id: args[7],
-          description: args[8],
-          website: args[9]
-        };
-        
-        if (!config.classy_client_id || !config.classy_client_secret) {
-          console.error('💥 Usage: npm run org:add <name> <classy_id> <client_id> <client_secret> [mailchimp_key] [server_prefix] [audience_id] [description] [website]');
-          throw new Error('Missing required API credentials');
+        // Check if command line arguments are provided
+        if (args.length >= 4) {
+          // Use command line mode
+          console.log('🏢 Organization Setup (Command Line Mode)');
+          console.log('==========================================');
+          
+          const config = {
+            name: args[1],
+            classy_id: parseInt(args[2]),
+            classy_client_id: args[3],
+            classy_client_secret: args[4],
+            mailchimp_api_key: args[5],
+            mailchimp_server_prefix: args[6],
+            mailchimp_audience_id: args[7],
+            description: args[8],
+            website: args[9]
+          };
+          
+          if (!config.classy_client_id || !config.classy_client_secret) {
+            console.error('💥 Usage: npm run org:add <name> <classy_id> <client_id> <client_secret> [mailchimp_key] [server_prefix] [audience_id] [description] [website]');
+            throw new Error('Missing required API credentials');
+          }
+          
+          await manager.addOrganization(config);
+        } else {
+          // Use interactive mode
+          await manager.interactiveAddOrganization();
         }
-        
-        await manager.addOrganization(config);
         break;
         
       case 'list':
@@ -368,10 +507,18 @@ async function main() {
       default:
         console.log('📖 Organization Manager Commands:');
         console.log('=================================');
-        console.log('npm run org:add <name> <classy_id> <client_id> <client_secret> [mailchimp_key] [server_prefix] [audience_id] [description] [website]');
-        console.log('npm run org:list');
-        console.log('npm run org:show <organization_id>');
-        console.log('npm run org:sync <organization_id>');
+        console.log('');
+        console.log('🏢 Add Organization:');
+        console.log('  npm run org:setup                            # Interactive wizard (recommended)');
+        console.log('  npm run org:add                              # Interactive wizard (same as org:setup)');
+        console.log('  npm run org:add <name> <classy_id> <client_id> <client_secret> [options...]  # Command line mode');
+        console.log('');
+        console.log('📋 Manage Organizations:');
+        console.log('  npm run org:list                             # List all organizations');
+        console.log('  npm run org:show <organization_id>           # Show organization details');
+        console.log('  npm run org:sync <organization_id>           # Sync organization data');
+        console.log('');
+        console.log('💡 Tip: Use the interactive wizard for easy setup with guided prompts!');
         throw new Error('Unknown command');
     }
     
