@@ -126,12 +126,20 @@ class KnexDatabase {
     return await this.knex.seed.run();
   }
 
-  // Database type detection
+  // Database type detection for SQL syntax compatibility
   get type() {
     if (!this.knex) {
       return process.env.DB_TYPE || 'sqlite';
     }
-    return this.knex.client.config.client;
+    const client = this.knex.client.config.client;
+    // Normalize database type for SQL syntax compatibility
+    if (client === 'mysql2' || client === 'mysql') {
+      return 'mysql';
+    } else if (client === 'sqlite3') {
+      return 'sqlite';
+    } else {
+      return 'pg'; // PostgreSQL
+    }
   }
 
   get client() {

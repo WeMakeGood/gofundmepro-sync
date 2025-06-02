@@ -8,6 +8,8 @@
     "dev": "NODE_ENV=development node daemon.js",
     "test": "jest",
     "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:quick": "node scripts/test-db-type.js && node scripts/test-supporter-stats.js",
     "lint": "eslint src/",
     "init-db": "node scripts/init-db.js",
     "manual-sync": "node scripts/manual-sync.js",
