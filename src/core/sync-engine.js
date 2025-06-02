@@ -169,21 +169,44 @@ class SyncEngine {
 
   async getLastSyncTime(entityType) {
     try {
+      // Use the actual last_sync_at timestamp from the target table (more reliable)
+      // rather than sync job completion time (less reliable)
+      const tableName = entityType;
       const query = `
+        SELECT MAX(last_sync_at) as last_sync 
+        FROM ${tableName}
+        WHERE last_sync_at IS NOT NULL
+      `;
+      
+      const result = await this.db.query(query);
+      
+      if (result && result.length > 0 && result[0].last_sync) {
+        logger.info(`Using actual data timestamp for ${entityType} incremental sync`, {
+          lastSyncTime: result[0].last_sync
+        });
+        return new Date(result[0].last_sync);
+      }
+      
+      // Fallback to sync_jobs table if no data timestamps available
+      const fallbackQuery = `
         SELECT MAX(completed_at) as last_sync 
         FROM sync_jobs 
         WHERE entity_type = ? AND status = 'completed'
       `;
       
-      const result = await this.db.query(query, [entityType]);
+      const fallbackResult = await this.db.query(fallbackQuery, [entityType]);
       
-      if (result && result.length > 0 && result[0].last_sync) {
-        return new Date(result[0].last_sync);
+      if (fallbackResult && fallbackResult.length > 0 && fallbackResult[0].last_sync) {
+        logger.warn(`Using sync job timestamp as fallback for ${entityType}`, {
+          lastSyncTime: fallbackResult[0].last_sync
+        });
+        return new Date(fallbackResult[0].last_sync);
       }
       
       // Return a recent date for first sync (last 30 days)
       const defaultDate = new Date();
       defaultDate.setDate(defaultDate.getDate() - 30);
+      logger.info(`Using default 30-day lookback for ${entityType} first sync`);
       return defaultDate;
     } catch (error) {
       logger.warn('Failed to get last sync time:', error);

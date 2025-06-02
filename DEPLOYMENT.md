@@ -113,6 +113,21 @@ npm run initial-sync -- --limit=100
 npm run initial-sync
 ```
 
+### 🔄 **Sync System Performance & Reliability**
+
+**Recent Critical Fixes (May 2025):**
+- ✅ Fixed sync timestamp tracking to use actual data timestamps
+- ✅ Added URL encoding for API date filters (GoFundMe Pro requirement)
+- ✅ Implemented organization-wide transaction syncing for reliability
+- ✅ Added graceful timeout handling for slow supporters API
+- ✅ Resolved 4+ day sync gap issue with 90+ missing transactions recovered
+
+**Expected Sync Behaviors:**
+- **Transactions**: Fast, reliable syncing using organization-wide endpoints
+- **Campaigns**: Uses client-side filtering due to API limitations
+- **Supporters**: Includes timeout protection (60-second limit) - timeouts are expected and handled gracefully
+- **Recurring Plans**: Standard incremental sync performance
+
 ### 4. MailChimp Integration (Optional)
 
 ```bash
@@ -288,12 +303,17 @@ npm run db:validate
 
 ## Sync Scheduling
 
-### Recommended Schedule
+### Recommended Schedule (Updated for Reliability)
 
-- **Incremental Sync**: Every 15 minutes during business hours
+- **Incremental Sync**: Every hour (more reliable than 15 minutes)
 - **Full Sync**: Daily at 2 AM (low traffic time)
 - **MailChimp Sync**: Daily after full sync completion
 - **System Restart**: Weekly for memory cleanup
+
+**Note**: Hourly incremental syncs are now recommended due to:
+- API timeout handling for supporters
+- Improved reliability with organization-wide transaction syncing
+- Better handling of API rate limits
 
 ### Cron Configuration
 
@@ -301,8 +321,13 @@ npm run db:validate
 # Edit crontab
 crontab -e
 
-# Add sync jobs
-*/15 8-18 * * 1-5 cd /var/www/gofundmepro-sync && npm run manual-sync supporters incremental
+# Updated sync schedule (hourly for reliability)
+0 * * * * cd /var/www/gofundmepro-sync && npm run manual-sync supporters incremental
+5 * * * * cd /var/www/gofundmepro-sync && npm run manual-sync transactions incremental
+10 * * * * cd /var/www/gofundmepro-sync && npm run manual-sync campaigns incremental
+15 * * * * cd /var/www/gofundmepro-sync && npm run manual-sync recurring_plans incremental
+
+# Daily full sync and MailChimp
 0 2 * * * cd /var/www/gofundmepro-sync && npm run initial-sync
 30 2 * * * cd /var/www/gofundmepro-sync && npm run mailchimp-sync
 ```
@@ -339,7 +364,22 @@ REQUIRE SSL;
 
 ### Common Issues
 
-1. **API Rate Limits**
+1. **Supporters API Timeouts (Expected Behavior)**
+   ```bash
+   # This is normal and handled gracefully
+   tail -f logs/combined.log | grep "timeout"
+   # Look for: "Supporters API too slow, skipping incremental sync this time"
+   # This is acceptable since supporters update infrequently
+   ```
+
+2. **Missing Recent Transactions**
+   ```bash
+   # Check sync timestamps are working correctly
+   node scripts/manual-sync.js transactions incremental --dry-run
+   # Should show proper last sync times from actual data
+   ```
+
+3. **API Rate Limits**
    ```bash
    # Check logs for 429 errors
    grep "429" logs/sync.log

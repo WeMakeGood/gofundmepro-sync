@@ -11,16 +11,22 @@ class CampaignSync {
       logger.info('Starting incremental campaign sync', { updatedSince, batchSize });
       
       // Get campaigns updated since last sync
-      // Use filter parameter with unencoded ISO8601 date format in +0000 timezone
-      const formattedDate = updatedSince.toISOString().replace(/\.\d{3}Z$/, '+0000');
+      // Use simpler approach due to API filtering issues
       const campaigns = await api.getCampaigns({
-        filter: `updated_at>${formattedDate}`,
-        per_page: batchSize
+        per_page: Math.min(batchSize, 100),
+        sort: 'updated_at:desc'
       }, params.organization_id);
       
-      stats.totalRecords = campaigns.length;
+      // Filter client-side for campaigns updated since last sync
+      const filteredCampaigns = campaigns.filter(campaign => {
+        return new Date(campaign.updated_at) > updatedSince;
+      });
       
-      for (const campaign of campaigns) {
+      stats.totalRecords = filteredCampaigns.length;
+      
+      logger.info(`Found ${campaigns.length} campaigns, ${filteredCampaigns.length} updated since ${updatedSince}`);
+      
+      for (const campaign of filteredCampaigns) {
         try {
           await this.upsertCampaign(db, campaign);
           stats.successfulRecords++;

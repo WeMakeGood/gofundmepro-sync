@@ -8,43 +8,33 @@ class TransactionSync {
     try {
       const updatedSince = params.updated_since;
       const batchSize = params.batch_size || 100;
-      const campaignIds = params.campaign_ids || await this.getAllCampaignIds(db);
+      const organizationId = params.organization_id;
       
       logger.info('Starting incremental transaction sync', { 
         updatedSince, 
-        batchSize, 
-        campaignCount: campaignIds.length 
+        batchSize,
+        organizationId
       });
       
-      for (const campaignId of campaignIds) {
+      // Use the helper method that's already tested and working
+      const transactions = await api.getTransactionsSince(updatedSince, {
+        per_page: batchSize
+      }, organizationId);
+      
+      stats.totalRecords = transactions.length;
+      
+      logger.info(`Found ${transactions.length} transactions since ${updatedSince}`);
+      
+      for (const transaction of transactions) {
         try {
-          // Use filter parameter with unencoded ISO8601 date format in +0000 timezone
-          // Use purchased_at for transactions as it's more relevant for financial data
-          const formattedDate = updatedSince.toISOString().replace(/\.\d{3}Z$/, '+0000');
-          const transactions = await api.getCampaignTransactions(campaignId, {
-            filter: `purchased_at>${formattedDate}`,
-            with: 'items', // Include transaction items as per Classy example
-            per_page: batchSize
-          });
-          
-          stats.totalRecords += transactions.length;
-          
-          for (const transaction of transactions) {
-            try {
-              await this.upsertTransaction(db, transaction, campaignId);
-              stats.successfulRecords++;
-            } catch (error) {
-              stats.failedRecords++;
-              logger.error('Failed to sync transaction:', {
-                transactionId: transaction.id,
-                campaignId,
-                error: error.message
-              });
-            }
-          }
+          // Extract campaign ID from transaction data
+          const campaignId = transaction.campaign?.id || transaction.campaign_id;
+          await this.upsertTransaction(db, transaction, campaignId);
+          stats.successfulRecords++;
         } catch (error) {
-          logger.error('Failed to sync transactions for campaign:', {
-            campaignId,
+          stats.failedRecords++;
+          logger.error('Failed to sync transaction:', {
+            transactionId: transaction.id,
             error: error.message
           });
         }

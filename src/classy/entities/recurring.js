@@ -18,8 +18,9 @@ class RecurringPlanSync {
       
       for (const campaignId of campaignIds) {
         try {
-          // Use filter parameter with encoded ISO8601 date format
-          const encodedDate = encodeURIComponent(updatedSince.toISOString());
+          // Use filter parameter with URL-encoded ISO8601 date format in +0000 timezone
+          const formattedDate = updatedSince.toISOString().replace(/\.\d{3}Z$/, '+0000');
+          const encodedDate = encodeURIComponent(formattedDate);
           const plans = await api.getCampaignRecurringPlans(campaignId, {
             filter: `updated_at>${encodedDate}`,
             per_page: batchSize

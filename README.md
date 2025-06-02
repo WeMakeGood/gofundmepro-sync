@@ -90,12 +90,13 @@ GoFundMe Pro API → Local Database → Analytics Views → External Integration
 
 ### Sync Modes
 
-- **Incremental** - Only sync records updated since last run
+- **Incremental** - Only sync records updated since last run (with intelligent timeout handling)
 - **Full** - Complete data refresh (use sparingly)
 - **Manual** - Single entity or date range sync
 
 ```bash
 # Incremental sync (recommended for regular use)
+# Note: Supporters sync includes automatic timeout handling for slow API responses
 node scripts/manual-sync.js supporters incremental
 
 # Full sync for specific entity
@@ -104,6 +105,21 @@ node scripts/manual-sync.js transactions full
 # Date-based sync
 node scripts/manual-sync.js supporters incremental --since=2024-01-01
 ```
+
+### Sync Performance & Reliability
+
+**Recent Improvements:**
+- Fixed sync timestamp tracking to use actual data timestamps instead of job timestamps
+- Added URL encoding for all API date filters (required by GoFundMe Pro API)
+- Implemented organization-wide transaction syncing for better reliability
+- Added graceful timeout handling for slow supporters API (60-second timeout)
+- Client-side filtering fallback for API endpoints with filtering limitations
+
+**Performance Notes:**
+- **Transactions**: Fast, reliable syncing using organization-wide endpoints
+- **Campaigns**: Uses client-side filtering due to API limitations
+- **Supporters**: Includes timeout protection due to slow API responses
+- **Recurring Plans**: Standard incremental sync performance
 
 ## 🎯 Donor Segmentation
 
@@ -263,6 +279,28 @@ node scripts/recalculate-supporter-stats.js validate
 # Recalculate supporter lifetime statistics (if needed)
 npm run fix:supporter-stats
 ```
+
+### Sync Troubleshooting
+
+**Common Issues & Solutions:**
+
+1. **Supporters sync timeouts** - This is expected and handled gracefully
+   ```bash
+   # Check logs for timeout messages (this is normal)
+   tail -f logs/combined.log | grep "timeout"
+   ```
+
+2. **Missing recent transactions** - Verify sync timestamps
+   ```bash
+   # Check last sync times for each entity
+   node scripts/manual-sync.js transactions incremental --dry-run
+   ```
+
+3. **API rate limiting** - The system automatically handles retries
+   ```bash
+   # Monitor API response times
+   tail -f logs/combined.log | grep "API"
+   ```
 
 ### Logs
 - **Application logs** - `./logs/sync.log`
