@@ -314,11 +314,71 @@ cli.command({
   }
 });
 
+// MailChimp plugin commands (Phase 3)
 cli.command({
   command: 'mailchimp <action>',
-  describe: 'MailChimp integration (Phase 3)',
-  handler: () => {
-    logger.warn('MailChimp commands will be implemented in Phase 3');
+  describe: 'MailChimp integration for donor segmentation and email marketing',
+  builder: (yargs) => {
+    return yargs
+      .positional('action', {
+        describe: 'MailChimp action to perform',
+        choices: ['sync', 'test', 'status', 'health']
+      })
+      .option('org-id', {
+        alias: 'o',
+        type: 'number',
+        describe: 'Organization ID to sync'
+      })
+      .option('limit', {
+        alias: 'l',
+        type: 'number',
+        describe: 'Maximum supporters to sync'
+      })
+      .option('batch-size', {
+        alias: 'b',
+        type: 'number',
+        default: 50,
+        describe: 'Supporters per batch'
+      })
+      .option('dry-run', {
+        type: 'boolean',
+        default: false,
+        describe: 'Show what would be synced without making changes'
+      })
+      .option('wait-completion', {
+        type: 'boolean',
+        default: false,
+        describe: 'Wait for MailChimp batch processing to complete'
+      });
+  },
+  handler: async (argv) => {
+    try {
+      await database.initialize();
+      
+      switch (argv.action) {
+        case 'sync':
+          await handleMailChimpSync(argv);
+          break;
+          
+        case 'test':
+          await handleMailChimpTest(argv);
+          break;
+          
+        case 'status':
+          await handleMailChimpStatus(argv);
+          break;
+          
+        case 'health':
+          await handleMailChimpHealth(argv);
+          break;
+      }
+      
+      await database.close();
+      process.exit(0);
+    } catch (error) {
+      logger.error('MailChimp command failed', error);
+      process.exit(1);
+    }
   }
 });
 
@@ -623,6 +683,258 @@ function getSyncClass(entityName) {
   };
   
   return syncClasses[entityName];
+}
+
+// MailChimp plugin handlers
+async function handleMailChimpSync(argv) {
+  const { PluginManager } = require('./core/plugin-manager');
+  
+  // Get organization to sync
+  let orgId = argv.orgId;
+  if (!orgId) {
+    const orgs = await organizationManager.listOrganizations();
+    if (orgs.length === 0) {
+      console.log('No organizations found. Add one with: npm run org:add');
+      process.exit(1);
+    }
+    if (orgs.length === 1) {
+      orgId = orgs[0].id;
+      console.log(`Using organization: ${orgs[0].name} (ID: ${orgId})`);
+    } else {
+      console.log('Multiple organizations found. Specify with --org-id:');
+      orgs.forEach(org => {
+        console.log(`  ${org.id}: ${org.name} (Classy ID: ${org.classy_id})`);
+      });
+      process.exit(1);
+    }
+  }
+
+  // Check for MailChimp configuration
+  if (!process.env.MAILCHIMP_API_KEY || !process.env.MAILCHIMP_LIST_ID) {
+    console.error('❌ MailChimp not configured. Set MAILCHIMP_API_KEY and MAILCHIMP_LIST_ID environment variables.');
+    process.exit(1);
+  }
+
+  console.log(`📧 Starting MailChimp sync...`);
+  
+  if (argv.dryRun) {
+    console.log('🏃 DRY RUN - No changes will be made');
+  }
+
+  try {
+    // Create and configure plugin manager
+    const manager = await PluginManager.createDefault({
+      mailchimp: {
+        apiKey: process.env.MAILCHIMP_API_KEY,
+        listId: process.env.MAILCHIMP_LIST_ID,
+        batchSize: argv.batchSize,
+        tagPrefix: 'Classy-',
+        waitForBatchCompletion: argv.waitCompletion
+      }
+    });
+
+    // Initialize plugins
+    const initResults = await manager.initializeAll();
+    if (initResults.failed.length > 0) {
+      console.error(`Failed to initialize plugins: ${initResults.failed.map(f => f.name).join(', ')}`);
+      process.exit(1);
+    }
+
+    const org = await organizationManager.getOrganization(orgId);
+    console.log(`Organization: ${org.name} (Classy ID: ${org.classy_id})`);
+
+    if (argv.dryRun) {
+      // For dry run, just show what would be synced
+      const supporters = await database.getKnex()('supporters')
+        .where('organization_id', orgId)
+        .whereNotNull('email_address')
+        .where('email_address', '!=', '')
+        .limit(argv.limit || 10);
+
+      console.log(`Would sync ${supporters.length} supporters to MailChimp`);
+      console.log('Sample supporter data:');
+      
+      supporters.slice(0, 3).forEach((supporter, index) => {
+        console.log(`  ${index + 1}. ${supporter.first_name} ${supporter.last_name} (${supporter.email_address})`);
+        console.log(`     Lifetime: $${supporter.lifetime_donation_amount || 0}, Count: ${supporter.lifetime_donation_count || 0}`);
+        console.log(`     Monthly recurring: $${supporter.monthly_recurring_amount || 0}`);
+      });
+      
+      return;
+    }
+
+    // Perform actual sync
+    const startTime = Date.now();
+    const results = await manager.processWithPlugin('mailchimp', {
+      type: 'supporters.full',
+      organizationId: orgId
+    }, {
+      organizationId: orgId,
+      limit: argv.limit,
+      waitForCompletion: argv.waitCompletion
+    });
+
+    const duration = Date.now() - startTime;
+
+    // Display results
+    if (results.success) {
+      console.log(`\n✅ MailChimp sync completed:`);
+      console.log(`   Total supporters: ${results.totalSupporters || 0}`);
+      console.log(`   With email addresses: ${results.supportersWithEmail || 0}`);
+      console.log(`   Successfully synced: ${results.processed || 0}`);
+      console.log(`   Errors: ${results.errors || 0}`);
+      console.log(`   Skipped: ${results.skipped || 0}`);
+      console.log(`   Batches: ${results.batches || 0}`);
+      console.log(`   Duration: ${(duration / 1000).toFixed(1)}s`);
+    } else {
+      console.error(`❌ MailChimp sync failed: ${results.error}`);
+    }
+
+    // Cleanup
+    await manager.shutdownAll();
+
+  } catch (error) {
+    console.error(`❌ MailChimp sync failed:`, error.message);
+    throw error;
+  }
+}
+
+async function handleMailChimpTest(argv) {
+  const { PluginManager } = require('./core/plugin-manager');
+
+  // Check for MailChimp configuration
+  if (!process.env.MAILCHIMP_API_KEY || !process.env.MAILCHIMP_LIST_ID) {
+    console.error('❌ MailChimp not configured. Set MAILCHIMP_API_KEY and MAILCHIMP_LIST_ID environment variables.');
+    process.exit(1);
+  }
+
+  console.log('🧪 Testing MailChimp integration...');
+
+  try {
+    // Create and configure plugin manager
+    const manager = await PluginManager.createDefault({
+      mailchimp: {
+        apiKey: process.env.MAILCHIMP_API_KEY,
+        listId: process.env.MAILCHIMP_LIST_ID,
+        batchSize: 50,
+        tagPrefix: 'Classy-'
+      }
+    });
+
+    // Initialize plugins
+    console.log('Initializing MailChimp plugin...');
+    const initResults = await manager.initializeAll();
+    
+    if (initResults.failed.length > 0) {
+      console.error(`❌ Plugin initialization failed: ${initResults.failed.map(f => f.name).join(', ')}`);
+      return;
+    }
+
+    // Get health status
+    console.log('Checking MailChimp API connectivity...');
+    const health = await manager.getHealthStatus();
+    
+    if (health.plugins.mailchimp?.status === 'healthy') {
+      console.log('✅ MailChimp API connection successful');
+      console.log(`   List: ${health.plugins.mailchimp.mailchimp.listName}`);
+      console.log(`   Current members: ${health.plugins.mailchimp.mailchimp.memberCount}`);
+      console.log(`   Datacenter: ${health.plugins.mailchimp.mailchimp.datacenter}`);
+    } else {
+      console.error('❌ MailChimp API connection failed');
+      console.error(`   Error: ${health.plugins.mailchimp?.error || 'Unknown error'}`);
+    }
+
+    // Cleanup
+    await manager.shutdownAll();
+
+  } catch (error) {
+    console.error(`❌ MailChimp test failed:`, error.message);
+    throw error;
+  }
+}
+
+async function handleMailChimpStatus(argv) {
+  const { PluginManager } = require('./core/plugin-manager');
+
+  if (!process.env.MAILCHIMP_API_KEY || !process.env.MAILCHIMP_LIST_ID) {
+    console.log('MailChimp not configured');
+    return;
+  }
+
+  try {
+    const manager = await PluginManager.createDefault({
+      mailchimp: {
+        apiKey: process.env.MAILCHIMP_API_KEY,
+        listId: process.env.MAILCHIMP_LIST_ID
+      }
+    });
+
+    const status = manager.getStatus();
+    
+    console.log('MailChimp Plugin Status:');
+    console.log(`  Manager initialized: ${status.manager.initialized}`);
+    console.log(`  Plugin count: ${status.manager.pluginCount}`);
+    
+    if (status.plugins.mailchimp) {
+      const plugin = status.plugins.mailchimp;
+      console.log(`  MailChimp plugin: ${plugin.initialized ? 'Initialized' : 'Not initialized'}`);
+      console.log(`  Health status: ${plugin.healthStatus || 'Unknown'}`);
+      console.log(`  Configuration:`);
+      console.log(`    API Key: ${plugin.config.apiKey ? '***' : 'Not set'}`);
+      console.log(`    List ID: ${plugin.config.listId || 'Not set'}`);
+      console.log(`    Batch size: ${plugin.config.batchSize || 50}`);
+      console.log(`    Tag prefix: ${plugin.config.tagPrefix || 'Classy-'}`);
+    }
+
+  } catch (error) {
+    console.error(`Failed to get MailChimp status:`, error.message);
+  }
+}
+
+async function handleMailChimpHealth(argv) {
+  const { PluginManager } = require('./core/plugin-manager');
+
+  if (!process.env.MAILCHIMP_API_KEY || !process.env.MAILCHIMP_LIST_ID) {
+    console.log('MailChimp not configured');
+    return;
+  }
+
+  try {
+    const manager = await PluginManager.createDefault({
+      mailchimp: {
+        apiKey: process.env.MAILCHIMP_API_KEY,
+        listId: process.env.MAILCHIMP_LIST_ID
+      }
+    });
+
+    await manager.initializeAll();
+    const health = await manager.getHealthStatus();
+    
+    console.log('MailChimp Health Check:');
+    console.log(`  Overall status: ${health.manager.status}`);
+    
+    if (health.plugins.mailchimp) {
+      const mailchimp = health.plugins.mailchimp;
+      console.log(`  MailChimp status: ${mailchimp.status}`);
+      
+      if (mailchimp.mailchimp) {
+        console.log(`    API connected: ${mailchimp.mailchimp.apiConnected}`);
+        console.log(`    List access: ${mailchimp.mailchimp.listAccess}`);
+        console.log(`    List name: ${mailchimp.mailchimp.listName || 'Unknown'}`);
+        console.log(`    Member count: ${mailchimp.mailchimp.memberCount || 0}`);
+        console.log(`    Datacenter: ${mailchimp.mailchimp.datacenter || 'Unknown'}`);
+      }
+      
+      if (mailchimp.error) {
+        console.error(`    Error: ${mailchimp.error}`);
+      }
+    }
+
+    await manager.shutdownAll();
+
+  } catch (error) {
+    console.error(`Health check failed:`, error.message);
+  }
 }
 
 // Parse and execute
