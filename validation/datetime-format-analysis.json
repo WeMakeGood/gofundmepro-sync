@@ -1,0 +1,109 @@
+{
+  "timestamp": "2025-06-03T16:13:53.885Z",
+  "organizationId": "64531",
+  "endpoint": "/2.0/organizations/64531/transactions",
+  "testResults": [
+    {
+      "format": "Classy Team Format (Unencoded)",
+      "value": "2025-04-20T00:00:00+0000",
+      "encoded": false,
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "returnedRecords": 5,
+      "sampleTimestamp": "2025-06-03T10:28:06+0000"
+    },
+    {
+      "format": "Classy Team Format (URL Encoded)",
+      "value": "2025-04-20T00%3A00%3A00%2B0000",
+      "encoded": true,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "ISO8601 with Z (Unencoded)",
+      "value": "2025-04-20T00:00:00Z",
+      "encoded": false,
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "returnedRecords": 5,
+      "sampleTimestamp": "2025-06-03T10:28:06+0000"
+    },
+    {
+      "format": "ISO8601 with Z (URL Encoded)",
+      "value": "2025-04-20T00%3A00%3A00Z",
+      "encoded": true,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "ISO8601 with milliseconds (Unencoded)",
+      "value": "2025-04-20T00:00:00.000Z",
+      "encoded": false,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "ISO8601 with milliseconds (URL Encoded)",
+      "value": "2025-04-20T00%3A00%3A00.000Z",
+      "encoded": true,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "Current date +0000 (Unencoded)",
+      "value": "2025-04-20T00:00:00.000+0000",
+      "encoded": false,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "Current date +0000 (URL Encoded)",
+      "value": "2025-04-20T00%3A00%3A00.000%2B0000",
+      "encoded": true,
+      "success": false,
+      "status": 400,
+      "error": "Request failed with status code 400",
+      "errorData": {
+        "error": "Invalid value and/or operator for purchased_at filtering condition."
+      }
+    },
+    {
+      "format": "Simple Date (Control)",
+      "value": "2025-04-20",
+      "encoded": false,
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "returnedRecords": 5,
+      "sampleTimestamp": "2025-06-03T10:28:06+0000"
+    }
+  ],
+  "summary": {
+    "totalFormats": 9,
+    "successfulFormats": 3,
+    "failedFormats": 6,
+    "recommendation": "Simple Date fallback"
+  }
+}

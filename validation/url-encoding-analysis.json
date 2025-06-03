@@ -1,0 +1,34 @@
+{
+  "timestamp": "2025-06-03T16:14:53.244Z",
+  "organizationId": "64531",
+  "results": [
+    {
+      "name": "Axios Params (Unencoded DateTime)",
+      "method": "axios-params",
+      "filter": "2025-04-20T00:00:00+0000",
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "finalURL": "https://api.classy.org/2.0/organizations/64531/transactions"
+    },
+    {
+      "name": "Manual URL (Pre-encoded DateTime)",
+      "method": "manual-url",
+      "filter": "2025-04-20T00%3A00%3A00%2B0000",
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "finalURL": "https://api.classy.org/2.0/organizations/64531/transactions?with=items&filter=purchased_at%3E2025-04-20T00%3A00%3A00%2B0000&per_page=5&page=1"
+    },
+    {
+      "name": "Manual URL (Classy Example Encoded)",
+      "method": "manual-url-classy",
+      "filter": "2025-04-20T00%3A00%3A00%2B0000",
+      "success": true,
+      "status": 200,
+      "totalRecords": 1125,
+      "finalURL": "https://api.classy.org/2.0/organizations/64531/transactions?with=items&filter=purchased_at%3E2025-04-20T00%3A00%3A00%2B0000&per_page=5&page=1"
+    }
+  ],
+  "conclusion": "Use Axios Params (Unencoded DateTime) approach"
+}
