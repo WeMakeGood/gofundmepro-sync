@@ -88,7 +88,7 @@ class SupportersSync extends BaseEntitySync {
       monthly_recurring_amount: 0,
       
       // Contact preferences and info
-      email_opt_in: supporter.email_opt_in || false,
+      email_opt_in: supporter.opt_in || false, // CORRECTED: API field is 'opt_in', not 'email_opt_in'
       phone: supporter.phone || null,
       
       // Address information

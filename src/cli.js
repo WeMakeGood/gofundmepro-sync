@@ -744,20 +744,32 @@ async function handleMailChimpSync(argv) {
     console.log(`Organization: ${org.name} (Classy ID: ${org.classy_id})`);
 
     if (argv.dryRun) {
-      // For dry run, just show what would be synced
+      // For dry run, show what would be synced (CONSENT COMPLIANT)
       const supporters = await database.getKnex()('supporters')
         .where('organization_id', orgId)
         .whereNotNull('email_address')
         .where('email_address', '!=', '')
+        .where('email_opt_in', true) // CRITICAL: Only show opted-in supporters
         .limit(argv.limit || 10);
 
-      console.log(`Would sync ${supporters.length} supporters to MailChimp`);
-      console.log('Sample supporter data:');
+      const totalWithEmails = await database.getKnex()('supporters')
+        .where('organization_id', orgId)
+        .whereNotNull('email_address')
+        .where('email_address', '!=', '')
+        .count('* as count')
+        .first();
+
+      console.log(`Would sync ${supporters.length} supporters to MailChimp (with email consent)`);
+      console.log(`Total supporters with emails: ${totalWithEmails.count}`);
+      console.log(`Supporters with email consent: ${supporters.length}`);
+      console.log(`Consent rate: ${((supporters.length / totalWithEmails.count) * 100).toFixed(1)}%`);
+      console.log('\nSample opted-in supporter data:');
       
       supporters.slice(0, 3).forEach((supporter, index) => {
         console.log(`  ${index + 1}. ${supporter.first_name} ${supporter.last_name} (${supporter.email_address})`);
         console.log(`     Lifetime: $${supporter.lifetime_donation_amount || 0}, Count: ${supporter.lifetime_donation_count || 0}`);
         console.log(`     Monthly recurring: $${supporter.monthly_recurring_amount || 0}`);
+        console.log(`     Email opt-in: ${supporter.email_opt_in ? '✅ YES' : '❌ NO'}`);
       });
       
       return;

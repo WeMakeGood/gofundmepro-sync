@@ -114,22 +114,42 @@ class MailChimpSyncPlugin extends BasePlugin {
 
     this.logger.info(`Starting MailChimp sync for ${supporters.length} supporters`);
 
-    // Filter supporters with email addresses
-    const supportersWithEmail = supporters.filter(supporter => 
+    // CONSENT COMPLIANCE: Filter supporters with email addresses AND email consent
+    const supportersWithEmailConsent = supporters.filter(supporter => 
       supporter.email_address && 
-      supporter.email_address.trim().length > 0
+      supporter.email_address.trim().length > 0 &&
+      supporter.email_opt_in === true // CRITICAL: Only sync opted-in supporters
     );
 
-    if (supportersWithEmail.length === 0) {
-      this.logger.warn('No supporters with email addresses found');
-      return { processed: 0, errors: 0, skipped: supporters.length };
+    const skippedForConsent = supporters.length - 
+      supporters.filter(s => s.email_address && s.email_address.trim().length > 0).length;
+    const skippedForNoConsent = supporters.filter(s => 
+      s.email_address && s.email_address.trim().length > 0 && !s.email_opt_in
+    ).length;
+
+    if (supportersWithEmailConsent.length === 0) {
+      this.logger.warn('No supporters with email consent found', {
+        totalSupporters: supporters.length,
+        skippedNoEmail: skippedForConsent,
+        skippedNoConsent: skippedForNoConsent
+      });
+      return { 
+        processed: 0, 
+        errors: 0, 
+        skipped: supporters.length,
+        skippedNoEmail: skippedForConsent,
+        skippedNoConsent: skippedForNoConsent
+      };
     }
 
-    this.logger.info(`Processing ${supportersWithEmail.length} supporters with email addresses`);
+    this.logger.info(`Processing ${supportersWithEmailConsent.length} supporters with email consent`, {
+      skippedNoEmail: skippedForConsent,
+      skippedNoConsent: skippedForNoConsent
+    });
 
     // Convert supporters to MailChimp format
     const members = await Promise.all(
-      supportersWithEmail.map(supporter => this.convertSupporterToMember(supporter))
+      supportersWithEmailConsent.map(supporter => this.convertSupporterToMember(supporter))
     );
 
     // Process in batches
@@ -139,17 +159,21 @@ class MailChimpSyncPlugin extends BasePlugin {
 
     this.logger.info('MailChimp sync completed', {
       totalSupporters: supporters.length,
-      supportersWithEmail: supportersWithEmail.length,
+      supportersWithEmailConsent: supportersWithEmailConsent.length,
+      skippedNoEmail: skippedForConsent,
+      skippedNoConsent: skippedForNoConsent,
       processed: results.processed,
       errors: results.errors
     });
 
     return {
       totalSupporters: supporters.length,
-      supportersWithEmail: supportersWithEmail.length,
+      supportersWithEmailConsent: supportersWithEmailConsent.length,
       processed: results.processed,
       errors: results.errors,
-      skipped: supporters.length - supportersWithEmail.length,
+      skipped: supporters.length - supportersWithEmailConsent.length,
+      skippedNoEmail: skippedForConsent,
+      skippedNoConsent: skippedForNoConsent,
       batches: results.batches?.length || 0
     };
   }
@@ -165,7 +189,16 @@ class MailChimpSyncPlugin extends BasePlugin {
       this.logger.warn('Supporter has no email address', {
         supporterId: supporter.id
       });
-      return { processed: 0, errors: 0, skipped: 1 };
+      return { processed: 0, errors: 0, skipped: 1, reason: 'no_email' };
+    }
+
+    // CONSENT COMPLIANCE: Check email opt-in
+    if (!supporter.email_opt_in) {
+      this.logger.warn('Supporter has not opted in to email marketing', {
+        supporterId: supporter.id,
+        email: supporter.email_address
+      });
+      return { processed: 0, errors: 0, skipped: 1, reason: 'no_email_consent' };
     }
 
     this.logger.debug('Syncing single supporter to MailChimp', {
@@ -224,11 +257,12 @@ class MailChimpSyncPlugin extends BasePlugin {
 
     this.logger.info('Starting full MailChimp sync', { organizationId, limit });
 
-    // Get all supporters with email addresses
+    // CRITICAL: Only get supporters who have opted in to email marketing
     let query = this.db('supporters')
       .where('organization_id', organizationId)
       .whereNotNull('email_address')
-      .where('email_address', '!=', '');
+      .where('email_address', '!=', '')
+      .where('email_opt_in', true); // CONSENT COMPLIANCE: Only opted-in supporters
 
     if (limit) {
       query = query.limit(limit);
@@ -236,9 +270,10 @@ class MailChimpSyncPlugin extends BasePlugin {
 
     const supporters = await query.select('*');
     
-    this.logger.info(`Found ${supporters.length} supporters with email addresses`);
+    this.logger.info(`Found ${supporters.length} supporters with email addresses and email consent`);
 
     if (supporters.length === 0) {
+      this.logger.warn('No supporters found with email consent - check email_opt_in field');
       return { processed: 0, errors: 0, skipped: 0 };
     }
 
