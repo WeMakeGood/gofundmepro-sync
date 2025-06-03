@@ -82,11 +82,15 @@ class OrganizationManager {
         updated_at: new Date()
       });
       
+      // Create default donor segmentation config for this organization
+      await this.createDefaultSegmentationConfig(orgId);
+      
       console.log(`✅ Organization added successfully!`);
       console.log(`   ID: ${orgId}`);
       console.log(`   Name: ${config.name}`);
       console.log(`   Classy ID: ${config.classy_id}`);
       console.log(`   Status: ${config.status || 'active'}`);
+      console.log(`   📊 Donor segmentation config created`);
       
       return orgId;
       
@@ -177,8 +181,14 @@ class OrganizationManager {
     }
   }
 
-  async syncOrganization(orgId) {
+  async syncOrganization(orgId, options = {}) {
     console.log(`🔄 Starting sync for organization ID: ${orgId}`);
+    if (options.dry_run) {
+      console.log('🧪 DRY RUN MODE - No data will be modified');
+    }
+    if (options.limit) {
+      console.log(`📊 LIMIT: ${options.limit} records per entity type`);
+    }
     
     try {
       await this.db.connect();
@@ -228,28 +238,41 @@ class OrganizationManager {
         // Initialize sync engine with organization context
         const SyncEngine = require('../src/core/sync-engine');
         const syncEngine = new SyncEngine({ organizationId: orgId });
+        await syncEngine.initialize();
         
         // Check if this is the first sync
         const lastSync = org.last_sync_at;
         const isFirstSync = !lastSync || lastSync === null;
         
-        if (isFirstSync) {
+        // Prepare sync parameters with CLI options
+        const syncParams = {
+          ...options,
+          syncType: (isFirstSync || options.full) ? 'full' : 'incremental'
+        };
+        
+        if (isFirstSync && !options.full) {
           console.log('   🆕 First sync detected - running full sync for all entities');
-          // Run full sync for initial data load
-          await syncEngine.syncAll({ syncType: 'full' });
+        } else if (options.full) {
+          console.log('   🔄 Running full sync (forced)');
         } else {
           console.log('   🔄 Running incremental sync');
-          // Run incremental sync for updates
-          await syncEngine.syncAll({ syncType: 'incremental' });
         }
         
-        // Update last sync time
-        await this.db.client('organizations')
-          .where({ id: orgId })
-          .update({ 
-            last_sync_at: new Date(),
-            updated_at: new Date() 
-          });
+        // Run sync with options
+        const results = await syncEngine.syncAll(syncParams);
+        
+        // Don't update last sync time in dry run mode
+        if (!options.dry_run) {
+          await this.db.client('organizations')
+            .where({ id: orgId })
+            .update({ 
+              last_sync_at: new Date(),
+              updated_at: new Date() 
+            });
+        }
+        
+        // Display results summary
+        this.displaySyncResults(results);
         
         console.log(`✅ Sync completed for organization ${org.name}`);
         
@@ -266,6 +289,170 @@ class OrganizationManager {
       
     } catch (error) {
       this.handleError(error, `Sync failed for organization ${orgId}: ${error.message}`);
+    }
+  }
+
+  /**
+   * Parse CLI sync options
+   * @param {string[]} args - CLI arguments array
+   * @returns {Object} Parsed options
+   */
+  parseSyncOptions(args) {
+    const options = {};
+    
+    for (let i = 0; i < args.length; i++) {
+      const arg = args[i];
+      
+      switch (arg) {
+        case '--dry-run':
+          options.dry_run = true;
+          break;
+        case '--limit':
+          const limitValue = parseInt(args[i + 1]);
+          if (isNaN(limitValue) || limitValue <= 0) {
+            throw new Error('--limit must be followed by a positive number');
+          }
+          options.limit = limitValue;
+          i++; // Skip the next argument since we consumed it
+          break;
+        case '--full':
+          options.full = true;
+          break;
+        case '--incremental':
+          options.incremental = true;
+          break;
+        case '--verbose':
+          options.verbose = true;
+          break;
+        default:
+          console.warn(`⚠️  Unknown option: ${arg}`);
+          break;
+      }
+    }
+    
+    // Validate conflicting options
+    if (options.full && options.incremental) {
+      throw new Error('Cannot specify both --full and --incremental');
+    }
+    
+    return options;
+  }
+
+  /**
+   * Display sync results summary
+   * @param {Object} results - Sync results from sync engine
+   */
+  displaySyncResults(results) {
+    console.log('\n📊 Sync Results Summary:');
+    console.log('========================');
+    
+    let totalRecords = 0;
+    let totalSuccessful = 0;
+    let totalFailed = 0;
+    
+    for (const [entityType, result] of Object.entries(results)) {
+      if (result.error) {
+        console.log(`❌ ${entityType}: ERROR - ${result.error}`);
+      } else if (result.skipped) {
+        console.log(`⏭️  ${entityType}: SKIPPED - ${result.reason}`);
+      } else if (result.dryRun) {
+        console.log(`🧪 ${entityType}: DRY RUN - ${result.message}`);
+        totalRecords += result.totalRecords || 0;
+      } else {
+        console.log(`✅ ${entityType}: ${result.successfulRecords || 0} successful, ${result.failedRecords || 0} failed (${result.totalRecords || 0} total)`);
+        totalRecords += result.totalRecords || 0;
+        totalSuccessful += result.successfulRecords || 0;
+        totalFailed += result.failedRecords || 0;
+      }
+    }
+    
+    console.log('------------------------');
+    console.log(`📊 TOTAL: ${totalSuccessful} successful, ${totalFailed} failed (${totalRecords} total)`);
+    
+    if (totalFailed > 0) {
+      console.log('⚠️  Some records failed to sync. Check logs for details.');
+    }
+  }
+
+  /**
+   * Create default donor segmentation configuration for a new organization
+   * @param {number} organizationId - The local organization ID
+   */
+  async createDefaultSegmentationConfig(organizationId) {
+    try {
+      // Insert donor value tiers (matching actual database schema)
+      await this.db.client('donor_segmentation_config').insert([
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Prospect',
+          min_amount: 0,
+          max_amount: 0,
+          sort_order: 1
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'First-Time',
+          min_amount: 0.01,
+          max_amount: 24.99,
+          sort_order: 2
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Small Donor',
+          min_amount: 25,
+          max_amount: 99.99,
+          sort_order: 3
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Regular Donor',
+          min_amount: 100,
+          max_amount: 499.99,
+          sort_order: 4
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Committed Donor',
+          min_amount: 500,
+          max_amount: 999.99,
+          sort_order: 5
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Major Donor',
+          min_amount: 1000,
+          max_amount: 4999.99,
+          sort_order: 6
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Principal Donor',
+          min_amount: 5000,
+          max_amount: 9999.99,
+          sort_order: 7
+        },
+        {
+          organization_id: organizationId,
+          segment_type: 'donor_value',
+          segment_name: 'Transformational',
+          min_amount: 10000,
+          max_amount: null,
+          sort_order: 8
+        }
+      ]);
+      
+      logger.info('Created default donor segmentation config', { organizationId });
+      console.log('   📊 Donor segmentation config created (8 value tiers)');
+    } catch (error) {
+      logger.error('Failed to create default segmentation config:', error);
+      throw error;
     }
   }
 
@@ -498,10 +685,13 @@ async function main() {
       case 'sync':
         const syncOrgId = parseInt(args[1]);
         if (!syncOrgId) {
-          throw new Error('Usage: npm run org:sync <organization_id>');
+          throw new Error('Usage: npm run org:sync <organization_id> [options]');
         }
         
-        await manager.syncOrganization(syncOrgId);
+        // Parse CLI options
+        const syncOptions = manager.parseSyncOptions(args.slice(2));
+        
+        await manager.syncOrganization(syncOrgId, syncOptions);
         break;
         
       default:
@@ -516,7 +706,14 @@ async function main() {
         console.log('📋 Manage Organizations:');
         console.log('  npm run org:list                             # List all organizations');
         console.log('  npm run org:show <organization_id>           # Show organization details');
-        console.log('  npm run org:sync <organization_id>           # Sync organization data');
+        console.log('  npm run org:sync <organization_id> [options] # Sync organization data');
+        console.log('');
+        console.log('🔄 Sync Options:');
+        console.log('  --dry-run                                    # Show what would be synced without making changes');
+        console.log('  --limit <number>                             # Limit records per entity type');
+        console.log('  --full                                       # Force full sync');
+        console.log('  --incremental                                # Force incremental sync');
+        console.log('  --verbose                                    # Enable verbose logging');
         console.log('');
         console.log('💡 Tip: Use the interactive wizard for easy setup with guided prompts!');
         throw new Error('Unknown command');

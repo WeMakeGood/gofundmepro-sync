@@ -45,7 +45,7 @@ async function testDatabaseFlexibility() {
     const trx = await db.beginTransaction();
     try {
       await trx('campaigns').insert({
-        classy_id: 'test_campaign_001',
+        id: 999999, // Classy campaign ID
         organization_id: orgs[0].id || 1,
         name: 'Test Campaign',
         status: 'active',
