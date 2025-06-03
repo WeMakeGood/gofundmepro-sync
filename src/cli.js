@@ -13,6 +13,12 @@ const { logger } = require('./utils/logger');
 const { organizationManager } = require('./services/organization-manager');
 const { encryption } = require('./utils/encryption-simple');
 
+// Import entity sync classes
+const { supportersSync } = require('./classy/entities/supporters');
+const { transactionsSync } = require('./classy/entities/transactions');
+const { campaignsSync } = require('./classy/entities/campaigns');
+const { recurringPlansSync } = require('./classy/entities/recurring-plans');
+
 // Initialize CLI
 const cli = yargs(hideBin(process.argv))
   .scriptName('classy-sync')
@@ -210,12 +216,101 @@ cli.command({
   }
 });
 
-// Placeholder commands for future phases
+// Sync commands (Phase 2)
 cli.command({
-  command: 'sync <entity>',
-  describe: 'Sync data from Classy API (Phase 2)',
-  handler: () => {
-    logger.warn('Sync commands will be implemented in Phase 2');
+  command: 'sync <entity> [type]',
+  describe: 'Sync data from Classy API using encrypted credentials',
+  builder: (yargs) => {
+    return yargs
+      .positional('entity', {
+        describe: 'Entity to sync',
+        choices: ['supporters', 'transactions', 'campaigns', 'recurring-plans', 'all']
+      })
+      .positional('type', {
+        describe: 'Sync type',
+        choices: ['incremental', 'full'],
+        default: 'incremental'
+      })
+      .option('org-id', {
+        alias: 'o',
+        type: 'number',
+        describe: 'Organization ID to sync'
+      })
+      .option('limit', {
+        alias: 'l',
+        type: 'number',
+        describe: 'Maximum records to sync'
+      })
+      .option('since', {
+        alias: 's',
+        type: 'string',
+        describe: 'Only sync records updated since date (YYYY-MM-DD)'
+      })
+      .option('recalculate-stats', {
+        type: 'boolean',
+        default: true,
+        describe: 'Recalculate lifetime stats after supporter sync'
+      })
+      .option('dry-run', {
+        type: 'boolean',
+        default: false,
+        describe: 'Show what would be synced without making changes'
+      });
+  },
+  handler: async (argv) => {
+    try {
+      await database.initialize();
+      
+      // Get organization to sync
+      let orgId = argv.orgId;
+      if (!orgId) {
+        const orgs = await organizationManager.listOrganizations();
+        if (orgs.length === 0) {
+          console.log('No organizations found. Add one with: npm run org:add');
+          process.exit(1);
+        }
+        if (orgs.length === 1) {
+          orgId = orgs[0].id;
+          console.log(`Using organization: ${orgs[0].name} (ID: ${orgId})`);
+        } else {
+          console.log('Multiple organizations found. Specify with --org-id:');
+          orgs.forEach(org => {
+            console.log(`  ${org.id}: ${org.name} (Classy ID: ${org.classy_id})`);
+          });
+          process.exit(1);
+        }
+      }
+      
+      // Parse since date if provided
+      let sinceDate = null;
+      if (argv.since) {
+        sinceDate = new Date(argv.since);
+        if (isNaN(sinceDate.getTime())) {
+          throw new Error('Invalid date format. Use YYYY-MM-DD');
+        }
+      }
+      
+      // Prepare sync options
+      const syncOptions = {
+        syncType: argv.type,
+        limit: argv.limit,
+        updatedSince: sinceDate,
+        recalculateStats: argv.recalculateStats,
+        dryRun: argv.dryRun
+      };
+      
+      if (argv.entity === 'all') {
+        await handleSyncAll(orgId, syncOptions);
+      } else {
+        await handleSyncEntity(argv.entity, orgId, syncOptions);
+      }
+      
+      await database.close();
+      process.exit(0);
+    } catch (error) {
+      logger.error('Sync command failed', error);
+      process.exit(1);
+    }
   }
 });
 
@@ -394,6 +489,140 @@ async function handleTestCredentials(argv) {
       createdAt: credentials.createdAt
     });
   }
+}
+
+// Sync handler functions
+async function handleSyncEntity(entityName, orgId, options) {
+  const { syncType, dryRun } = options;
+  
+  console.log(`🔄 Starting ${syncType} sync for ${entityName}...`);
+  
+  if (dryRun) {
+    console.log('🏃 DRY RUN - No changes will be made');
+  }
+  
+  try {
+    // Get organization details
+    const org = await organizationManager.getOrganization(orgId);
+    console.log(`Organization: ${org.name} (Classy ID: ${org.classy_id})`);
+    
+    // Get sync class
+    const syncClass = getSyncClass(entityName);
+    if (!syncClass) {
+      throw new Error(`Unknown entity: ${entityName}`);
+    }
+    
+    if (dryRun) {
+      // For dry run, just test API connectivity
+      const health = await syncClass.healthCheck(orgId);
+      console.log('API Health:', health.api?.status || 'unknown');
+      console.log('Current records:', health.database?.recordCount || 0);
+      console.log('Would sync from Classy API...');
+      return;
+    }
+    
+    // Perform actual sync
+    let results;
+    if (entityName === 'supporters' || entityName === 'transactions' || entityName === 'recurring-plans') {
+      // Use special sync method with automatic stats recalculation
+      results = await syncClass.sync(orgId, org.classy_id, options);
+    } else {
+      // Use standard sync methods
+      if (syncType === 'full') {
+        results = await syncClass.fullSync(orgId, org.classy_id, options);
+      } else {
+        results = await syncClass.incrementalSync(orgId, org.classy_id, options);
+      }
+    }
+    
+    // Display results
+    console.log(`\n✅ ${entityName} sync completed:`);
+    console.log(`   Type: ${results.type}`);
+    console.log(`   Total processed: ${results.totalProcessed}`);
+    console.log(`   Successful: ${results.successful}`);
+    console.log(`   Errors: ${results.errors}`);
+    console.log(`   Duration: ${(results.duration / 1000).toFixed(1)}s`);
+    
+    if (results.lastSyncTime) {
+      console.log(`   Last sync time: ${results.lastSyncTime.toISOString()}`);
+    }
+    
+    if (results.lifetimeStats) {
+      if (entityName === 'supporters') {
+        console.log(`   Lifetime stats: ${results.lifetimeStats.supportersUpdated} supporters updated`);
+        console.log(`   Total lifetime value: $${results.lifetimeStats.totalLifetimeAmount.toFixed(2)}`);
+      } else if (entityName === 'transactions') {
+        console.log(`   Lifetime stats: ${results.lifetimeStats.affectedSupporters} supporters updated`);
+        console.log(`   Total lifetime value: $${results.lifetimeStats.totalLifetimeAmount.toFixed(2)}`);
+      }
+    }
+    
+    if (results.recurringStats) {
+      console.log(`   Recurring stats: ${results.recurringStats.affectedSupporters} supporters updated`);
+      if (results.recurringStats.totalMonthlyRecurring !== undefined) {
+        console.log(`   Total monthly recurring: $${results.recurringStats.totalMonthlyRecurring.toFixed(2)}`);
+      }
+    }
+    
+  } catch (error) {
+    console.error(`❌ ${entityName} sync failed:`, error.message);
+    throw error;
+  }
+}
+
+async function handleSyncAll(orgId, options) {
+  const entities = ['campaigns', 'supporters', 'transactions', 'recurring-plans'];
+  const { syncType } = options;
+  
+  console.log(`🔄 Starting ${syncType} sync for all entities...`);
+  
+  const results = {
+    successful: [],
+    failed: [],
+    totalDuration: 0
+  };
+  
+  for (const entity of entities) {
+    try {
+      console.log(`\n📊 Syncing ${entity}...`);
+      const startTime = Date.now();
+      
+      await handleSyncEntity(entity, orgId, { ...options, entity });
+      
+      const duration = Date.now() - startTime;
+      results.successful.push({ entity, duration });
+      results.totalDuration += duration;
+      
+    } catch (error) {
+      results.failed.push({ entity, error: error.message });
+      console.error(`Failed to sync ${entity}:`, error.message);
+      // Continue with other entities
+    }
+  }
+  
+  // Summary
+  console.log(`\n🎉 Sync all completed:`);
+  console.log(`   Successful entities: ${results.successful.length}`);
+  console.log(`   Failed entities: ${results.failed.length}`);
+  console.log(`   Total duration: ${(results.totalDuration / 1000).toFixed(1)}s`);
+  
+  if (results.failed.length > 0) {
+    console.log(`\n❌ Failed entities:`);
+    results.failed.forEach(fail => {
+      console.log(`   - ${fail.entity}: ${fail.error}`);
+    });
+  }
+}
+
+function getSyncClass(entityName) {
+  const syncClasses = {
+    'supporters': supportersSync,
+    'transactions': transactionsSync,
+    'campaigns': campaignsSync,
+    'recurring-plans': recurringPlansSync
+  };
+  
+  return syncClasses[entityName];
 }
 
 // Parse and execute
