@@ -1,23 +1,49 @@
 {
   "name": "classy-sync",
   "version": "2.0.0",
-  "description": "Clean Classy (GoFundMe Pro) data synchronization system",
+  "description": "Clean Classy (GoFundMe Pro) data synchronization system with plugin architecture",
   "private": true,
   "scripts": {
+    "db:migrate": "knex migrate:latest",
+    "db:rollback": "knex migrate:rollback",
+    "db:seed": "knex seed:run",
+    "db:reset": "knex migrate:rollback --all && knex migrate:latest && knex seed:run",
+    "sync": "node src/cli.js sync",
+    "org:add": "node src/cli.js org add",
+    "org:list": "node src/cli.js org list",
+    "org:sync": "node src/cli.js org sync",
+    "mailchimp:sync": "node src/cli.js mailchimp sync",
+    "test": "jest",
+    "test:integration": "jest --testPathPattern=integration",
+    "validate": "npm run test:all",
     "test:auth": "node validation/test-auth.js",
-    "test:api": "node validation/test-api-responses.js", 
+    "test:api": "node validation/test-api-responses.js",
     "test:filtering": "node validation/test-filtering.js",
     "test:schema": "node validation/analyze-data-structures.js",
     "test:datetime": "node validation/test-datetime-formats.js",
-    "test:all": "node validation/run-all-tests.js",
-    "validate": "npm run test:all"
+    "test:all": "node validation/run-all-tests.js"
   },
   "dependencies": {
     "axios": "^1.6.0",
     "dotenv": "^16.3.1",
-    "winston": "^3.11.0"
+    "knex": "^3.1.0",
+    "mysql2": "^3.14.1",
+    "winston": "^3.11.0",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "sqlite3": "^5.1.6"
   },
   "engines": {
     "node": ">=18.0.0"
-  }
+  },
+  "keywords": [
+    "classy",
+    "gofundme-pro",
+    "fundraising",
+    "sync",
+    "mailchimp",
+    "donations"
+  ]
 }
