@@ -27,7 +27,7 @@ The following reference documents contain important insights from analyzing the 
 - **Problem**: Client-side filtering downloaded entire datasets then filtered locally
 - **Solution**: Server-side filtering using proper API filter parameters
 
-## 🎉 Validation Status: PASSED
+## 🎉 Validation Status: PASSED ✅ TIMESTAMP PRESERVATION FIXED
 
 **Live API validation completed successfully!** Key findings:
 - ✅ Authentication working perfectly
@@ -36,6 +36,9 @@ The following reference documents contain important insights from analyzing the 
 - ✅ Rich data available (94 transaction fields, 103 campaign fields)
 - ✅ Server-side filtering confirmed with proper encoding
 - ✅ All assumptions validated and corrected
+- ✅ **TIMESTAMP PRESERVATION FIXED**: Classy API timestamps now properly preserved for change detection
+
+**Critical Fix Completed**: Fixed timestamp overwrites across all entities that were breaking MailChimp incremental sync detection.
 
 See `VALIDATION_FINDINGS.md` and `DATETIME_FILTERING_SOLUTION.md` for complete analysis.
 

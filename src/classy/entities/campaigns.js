@@ -107,9 +107,9 @@ class CampaignsSync extends BaseEntitySync {
       // Description and additional info
       description: campaign.description || null,
       
-      // Timestamps
+      // Timestamps - PRESERVE Classy API timestamps for change detection
       created_at: campaign.created_at ? new Date(campaign.created_at) : now,
-      updated_at: now,
+      updated_at: campaign.updated_at ? new Date(campaign.updated_at) : now,
       last_sync_at: now
     };
 

@@ -97,9 +97,9 @@ class SupportersSync extends BaseEntitySync {
       country: supporter.country || null,
       postal_code: supporter.postal_code || null,
       
-      // Timestamps
+      // Timestamps - PRESERVE Classy API timestamps for change detection
       created_at: supporter.created_at ? new Date(supporter.created_at) : now,
-      updated_at: now,
+      updated_at: supporter.updated_at ? new Date(supporter.updated_at) : now,
       last_sync_at: now
     };
 
@@ -166,13 +166,12 @@ class SupportersSync extends BaseEntitySync {
             FROM transactions 
             WHERE ${transactionWhereClause}
               AND transactions.supporter_id = supporters.id
-          ), 0),
-          updated_at = ?
+          ), 0)
         WHERE supporters.organization_id = ?
         ${supporterIds ? `AND supporters.id IN (${supporterIds.map(() => '?').join(',')})` : ''}
       `;
 
-      // Build parameters: transaction params for first subquery, same for second subquery, update time, org ID, then supporter IDs if specified
+      // Build parameters: transaction params for first subquery, same for second subquery, org ID, then supporter IDs if specified  
       let statsParams = [];
       statsParams = statsParams.concat(baseTransactionParams); // First subquery params
       if (supporterIds && supporterIds.length > 0) {
@@ -182,7 +181,6 @@ class SupportersSync extends BaseEntitySync {
       if (supporterIds && supporterIds.length > 0) {
         statsParams = statsParams.concat(supporterIds); // Second subquery supporter IDs
       }
-      statsParams.push(new Date()); // updated_at
       statsParams.push(organizationId); // WHERE supporters.organization_id
       if (supporterIds && supporterIds.length > 0) {
         statsParams = statsParams.concat(supporterIds); // Main WHERE supporter IDs
@@ -200,13 +198,12 @@ class SupportersSync extends BaseEntitySync {
               AND recurring_plans.status = 'active'
               AND recurring_plans.frequency = 'monthly'
               AND recurring_plans.supporter_id = supporters.id
-          ), 0),
-          updated_at = ?
+          ), 0)
         WHERE supporters.organization_id = ?
         ${supporterIds ? `AND supporters.id IN (${supporterIds.map(() => '?').join(',')})` : ''}
       `;
 
-      let recurringParams = [organizationId, new Date(), organizationId];
+      let recurringParams = [organizationId, organizationId];
       if (supporterIds && supporterIds.length > 0) {
         recurringParams = recurringParams.concat(supporterIds);
       }

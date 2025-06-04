@@ -97,8 +97,8 @@ class BaseEntitySync {
         .whereIn('id', entityIds)
         .andWhere('organization_id', organizationId)
         .update({ 
-          last_sync_at: now,
-          updated_at: now
+          last_sync_at: now
+          // NOTE: updated_at should preserve Classy API timestamp, not sync time
         });
         
       this.logger.debug('Updated sync timestamps', { 

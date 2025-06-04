@@ -30,7 +30,8 @@
     "test:filtering": "node validation/test-filtering.js",
     "test:schema": "node validation/analyze-data-structures.js",
     "test:datetime": "node validation/test-datetime-formats.js",
-    "test:all": "node validation/run-all-tests.js"
+    "test:all": "node validation/run-all-tests.js",
+    "fix:timestamps": "node scripts/reset-timestamps-for-resync.js"
   },
   "dependencies": {
     "axios": "^1.6.0",

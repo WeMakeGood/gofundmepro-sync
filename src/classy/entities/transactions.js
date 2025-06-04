@@ -170,9 +170,9 @@ class TransactionsSync extends BaseEntitySync {
       status: mapStatus(transaction.status),
       purchased_at: transaction.purchased_at ? new Date(transaction.purchased_at) : now,
       
-      // Timestamps
+      // Timestamps - PRESERVE Classy API timestamps for change detection
       created_at: transaction.created_at ? new Date(transaction.created_at) : now,
-      updated_at: now,
+      updated_at: transaction.updated_at ? new Date(transaction.updated_at) : now,
       last_sync_at: now
     };
 

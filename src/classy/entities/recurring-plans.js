@@ -142,9 +142,9 @@ class RecurringPlansSync extends BaseEntitySync {
         ? new Date(recurringPlan.next_processing_date) 
         : null, // API field: next_processing_date
       
-      // Timestamps
+      // Timestamps - PRESERVE Classy API timestamps for change detection
       created_at: recurringPlan.created_at ? new Date(recurringPlan.created_at) : now,
-      updated_at: now,
+      updated_at: recurringPlan.updated_at ? new Date(recurringPlan.updated_at) : now,
       last_sync_at: now
     };
 

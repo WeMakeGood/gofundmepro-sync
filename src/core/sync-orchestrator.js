@@ -498,10 +498,9 @@ class SyncOrchestrator {
         };
       }
 
-      // Process with plugin manager
+      // Process with plugin manager using incremental sync for efficiency
       const results = await this.pluginManager.processWithAllPlugins({
-        type: 'supporters.sync',
-        supporters
+        type: 'supporters.incremental'
       }, { 
         organizationId: orgId,
         syncType: 'incremental' 
