@@ -382,6 +382,67 @@ cli.command({
   }
 });
 
+// Health monitoring commands
+cli.command({
+  command: 'health [component]',
+  describe: 'System health monitoring commands',
+  builder: (yargs) => {
+    return yargs
+      .positional('component', {
+        describe: 'Specific component to check (optional)',
+        type: 'string'
+      })
+      .option('detailed', {
+        alias: 'd',
+        type: 'boolean',
+        describe: 'Show detailed health report',
+        default: false
+      })
+      .option('watch', {
+        alias: 'w',
+        type: 'boolean', 
+        describe: 'Continuously monitor health',
+        default: false
+      })
+      .option('interval', {
+        alias: 'i',
+        type: 'number',
+        describe: 'Watch interval in seconds',
+        default: 30
+      });
+  },
+  handler: async (argv) => {
+    try {
+      await handleHealthCheck(argv);
+    } catch (error) {
+      logger.error('Health check failed', { error: error.message });
+      process.exit(1);
+    }
+  }
+});
+
+cli.command({
+  command: 'status',
+  describe: 'Quick system status overview',
+  builder: (yargs) => {
+    return yargs
+      .option('json', {
+        alias: 'j',
+        type: 'boolean',
+        describe: 'Output as JSON',
+        default: false
+      });
+  },
+  handler: async (argv) => {
+    try {
+      await handleSystemStatus(argv);
+    } catch (error) {
+      logger.error('Status check failed', { error: error.message });
+      process.exit(1);
+    }
+  }
+});
+
 // Handle unknown commands
 cli.command({
   command: '*',
@@ -946,6 +1007,180 @@ async function handleMailChimpHealth(argv) {
 
   } catch (error) {
     console.error(`Health check failed:`, error.message);
+  }
+}
+
+// Health monitoring handler functions
+async function handleHealthCheck(argv) {
+  const { healthMonitor } = require('./core/health-monitor');
+  
+  console.log('🏥 System Health Check');
+  console.log('=====================');
+  
+  try {
+    // Initialize standard components
+    await healthMonitor.initializeStandardComponents();
+    
+    if (argv.component) {
+      // Check specific component
+      console.log(`Checking component: ${argv.component}\n`);
+      
+      const result = await healthMonitor.checkComponent(argv.component);
+      displayComponentHealth(result, argv.detailed);
+    } else {
+      // Check all components
+      if (argv.watch) {
+        console.log(`Starting continuous monitoring (${argv.interval}s intervals)`);
+        console.log('Press Ctrl+C to stop\n');
+        
+        // Initial check
+        await performFullHealthCheck(healthMonitor, argv.detailed);
+        
+        // Start watching
+        const intervalId = setInterval(async () => {
+          console.clear();
+          console.log('🏥 System Health Check - Live Monitoring');
+          console.log('======================================');
+          console.log(`Updated: ${new Date().toLocaleTimeString()}\n`);
+          
+          await performFullHealthCheck(healthMonitor, argv.detailed);
+        }, argv.interval * 1000);
+        
+        // Handle graceful shutdown
+        process.on('SIGINT', () => {
+          clearInterval(intervalId);
+          console.log('\n👋 Health monitoring stopped');
+          process.exit(0);
+        });
+        
+      } else {
+        await performFullHealthCheck(healthMonitor, argv.detailed);
+      }
+    }
+    
+  } catch (error) {
+    console.error('❌ Health check failed:', error.message);
+    process.exit(1);
+  }
+}
+
+async function performFullHealthCheck(healthMonitor, detailed) {
+  const systemHealth = await healthMonitor.checkAllComponents({ parallel: true });
+  
+  // Overall status
+  console.log(`🔍 Overall Status: ${getStatusIcon(systemHealth.status)} ${systemHealth.status.toUpperCase()}`);
+  console.log(`⏱️  Check Duration: ${systemHealth.duration}ms`);
+  console.log(`📊 Components: ${systemHealth.summary.healthy}/${systemHealth.summary.total} healthy\n`);
+  
+  // Component details
+  systemHealth.components.forEach(component => {
+    displayComponentHealth(component, detailed);
+  });
+  
+  // Recommendations
+  if (detailed && systemHealth.status !== 'healthy') {
+    const report = await healthMonitor.generateHealthReport();
+    if (report.recommendations.length > 0) {
+      console.log('\n💡 Recommendations:');
+      report.recommendations.forEach(rec => {
+        console.log(`   ${rec.type.toUpperCase()}: ${rec.message}`);
+        console.log(`   Action: ${rec.action}\n`);
+      });
+    }
+  }
+}
+
+function displayComponentHealth(component, detailed) {
+  const icon = getStatusIcon(component.status);
+  console.log(`${icon} ${component.component}: ${component.status.toUpperCase()}`);
+  
+  if (component.critical && component.status === 'error') {
+    console.log('   ⚠️  CRITICAL COMPONENT');
+  }
+  
+  if (component.duration) {
+    console.log(`   Response time: ${component.duration}ms`);
+  }
+  
+  if (detailed) {
+    // Show additional details based on component type
+    if (component.database) {
+      console.log(`   Database: ${component.database}`);
+      if (component.connections) {
+        console.log(`   Connections: ${component.connections.used}/${component.connections.max} used`);
+      }
+    }
+    
+    if (component.listName) {
+      console.log(`   List: ${component.listName}`);
+      console.log(`   Members: ${component.memberCount?.toLocaleString() || 0}`);
+      console.log(`   Datacenter: ${component.datacenter || 'Unknown'}`);
+    }
+    
+    if (component.pluginCount !== undefined) {
+      console.log(`   Plugins: ${component.pluginCount}`);
+    }
+  }
+  
+  if (component.error) {
+    console.log(`   Error: ${component.error}`);
+  }
+  
+  console.log('');
+}
+
+function getStatusIcon(status) {
+  switch (status) {
+    case 'healthy': return '✅';
+    case 'degraded': return '⚠️';
+    case 'critical': return '🔴';
+    case 'error': return '❌';
+    case 'disabled': return '⏸️';
+    default: return '❓';
+  }
+}
+
+async function handleSystemStatus(argv) {
+  const { healthMonitor } = require('./core/health-monitor');
+  
+  try {
+    // Initialize standard components
+    await healthMonitor.initializeStandardComponents();
+    
+    // Get quick status
+    const status = healthMonitor.getSystemStatus();
+    
+    if (argv.json) {
+      console.log(JSON.stringify(status, null, 2));
+      return;
+    }
+    
+    console.log('📊 System Status');
+    console.log('===============');
+    console.log(`Status: ${getStatusIcon(status.status)} ${status.status.toUpperCase()}`);
+    
+    if (status.lastCheck) {
+      console.log(`Last Check: ${new Date(status.lastCheck).toLocaleString()}`);
+    } else {
+      console.log('Last Check: Never');
+    }
+    
+    console.log(`Components: ${status.summary.healthy}/${status.summary.total} healthy`);
+    
+    if (status.summary.errors > 0) {
+      console.log(`Errors: ${status.summary.errors} (${status.summary.criticalErrors} critical)`);
+    }
+    
+    console.log('\nComponent Summary:');
+    status.components.forEach(comp => {
+      const icon = getStatusIcon(comp.status);
+      const critical = comp.critical ? ' (CRITICAL)' : '';
+      console.log(`  ${icon} ${comp.name}${critical}`);
+    });
+    
+  } catch (error) {
+    console.error('❌ Status check failed:', error.message);
+    process.exit(1);
   }
 }
 
