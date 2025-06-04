@@ -104,8 +104,8 @@ npm run db:migrate
 # Seed reference data
 npm run db:seed
 
-# Verify database setup
-npm run db:status
+# Verify database setup with health check
+npm run health
 ```
 
 ### 5. Health Check Verification

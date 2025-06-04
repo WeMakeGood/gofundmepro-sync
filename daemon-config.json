@@ -1,0 +1,26 @@
+{
+  "syncIntervals": {
+    "supporters": 1800000,
+    "transactions": 900000,
+    "campaigns": 3600000,
+    "recurringPlans": 3600000,
+    "plugins": 3600000
+  },
+  "healthCheck": {
+    "interval": 300000,
+    "alertOnFailure": true
+  },
+  "statusReporting": {
+    "interval": 3600000,
+    "logLevel": "info"
+  },
+  "autoRestart": {
+    "enabled": true,
+    "maxRestarts": 5,
+    "restartDelay": 30000
+  },
+  "plugins": {
+    "enabled": true,
+    "mailchimp": true
+  }
+}

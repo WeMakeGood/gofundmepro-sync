@@ -414,9 +414,12 @@ class ClassySyncDaemon {
    * @returns {Object} Status information
    */
   getStatus() {
+    // Check if daemon is actually running by examining PID file
+    const actuallyRunning = this.checkDaemonRunning();
+    
     return {
-      isRunning: this.isRunning,
-      pid: process.pid,
+      isRunning: actuallyRunning.running,
+      pid: actuallyRunning.pid || process.pid,
       startTime: this.startTime,
       uptime: this.startTime ? Date.now() - this.startTime.getTime() : 0,
       restartCount: this.restartCount,
@@ -425,6 +428,32 @@ class ClassySyncDaemon {
       memory: process.memoryUsage(),
       performance: performanceTracker.getStatus()
     };
+  }
+
+  /**
+   * Check if daemon is actually running by checking PID file
+   * @returns {Object} Running status and PID
+   */
+  checkDaemonRunning() {
+    if (fs.existsSync(this.pidFile)) {
+      try {
+        const pidData = fs.readFileSync(this.pidFile, 'utf8');
+        const existingPid = parseInt(pidData.trim());
+        
+        // Check if process is still running
+        process.kill(existingPid, 0);
+        return { running: true, pid: existingPid };
+      } catch (killError) {
+        if (killError.code === 'ESRCH') {
+          // Process not found
+          return { running: false, pid: null };
+        } else {
+          // Some other error, assume not running
+          return { running: false, pid: null };
+        }
+      }
+    }
+    return { running: false, pid: null };
   }
 
   /**

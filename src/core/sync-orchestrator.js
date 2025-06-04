@@ -499,8 +499,8 @@ class SyncOrchestrator {
       }
 
       // Process with plugin manager
-      const results = await this.pluginManager.processAllPlugins({
-        type: 'supporters',
+      const results = await this.pluginManager.processWithAllPlugins({
+        type: 'supporters.sync',
         supporters
       }, { 
         organizationId: orgId,
@@ -515,14 +515,15 @@ class SyncOrchestrator {
         task.nextRun = new Date(Date.now() + task.interval);
       }
 
-      const successful = results.filter(r => r.success).length;
-      const failed = results.filter(r => !r.success).length;
+      const successful = results.successful ? results.successful.length : 0;
+      const failed = results.failed ? results.failed.length : 0;
+      const totalPlugins = successful + failed;
 
       timer({
         success: failed === 0,
         processed: supporters.length,
         errors: failed,
-        pluginsCount: results.length
+        pluginsCount: totalPlugins
       });
 
       logger.info('Plugin sync completed', {
@@ -530,7 +531,7 @@ class SyncOrchestrator {
         supporters: supporters.length,
         successful,
         failed,
-        plugins: results.length
+        plugins: totalPlugins
       });
 
       return {

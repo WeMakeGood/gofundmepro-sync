@@ -413,9 +413,15 @@ cli.command({
   },
   handler: async (argv) => {
     try {
-      await handleHealthCheck(argv);
+      const watchMode = await handleHealthCheck(argv);
+      // Only clean up and exit if not in watch mode
+      if (!watchMode) {
+        await database.close();
+        process.exit(0);
+      }
     } catch (error) {
       logger.error('Health check failed', { error: error.message });
+      await database.close();
       process.exit(1);
     }
   }
@@ -436,8 +442,12 @@ cli.command({
   handler: async (argv) => {
     try {
       await handleSystemStatus(argv);
+      // Clean up database connections and exit
+      await database.close();
+      process.exit(0);
     } catch (error) {
       logger.error('Status check failed', { error: error.message });
+      await database.close();
       process.exit(1);
     }
   }
@@ -1047,20 +1057,23 @@ async function handleHealthCheck(argv) {
         }, argv.interval * 1000);
         
         // Handle graceful shutdown
-        process.on('SIGINT', () => {
+        process.on('SIGINT', async () => {
           clearInterval(intervalId);
           console.log('\n👋 Health monitoring stopped');
+          await database.close();
           process.exit(0);
         });
         
+        return true; // Indicate watch mode is active
       } else {
         await performFullHealthCheck(healthMonitor, argv.detailed);
+        return false; // Indicate non-watch mode
       }
     }
     
   } catch (error) {
     console.error('❌ Health check failed:', error.message);
-    process.exit(1);
+    throw error; // Let the handler deal with cleanup and exit
   }
 }
 
