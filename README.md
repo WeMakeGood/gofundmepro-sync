@@ -97,6 +97,8 @@ recurring_plans: id (bigint, Classy ID), supporter_id (FK), campaign_id (FK),
                 amount, frequency, status, next_payment_date, ...
 ```
 
+**Database Configuration**: `src/config/database.js` with Knex.js abstraction
+
 ## 📋 Available Commands
 
 ### Daemon Management
@@ -272,22 +274,21 @@ npm run status --json
 
 ## 📚 Documentation
 
-### Implementation Guides
-- **`CONTINUOUS_SYNC_IMPLEMENTATION_SUMMARY.md`** - Comprehensive continuous sync architecture
-- **`PHASE_4_IMPLEMENTATION_SUMMARY.md`** - Health monitoring and CLI management
-- **`CLASSY_API_REDESIGN_PLAN.md`** - Complete API architecture and validated patterns
-- **`MAILCHIMP_INTEGRATION_SUMMARY.md`** - Proven MailChimp integration details
+### Core Documentation
+- **[Architecture Guide](docs/ARCHITECTURE.md)** - Complete system architecture and design principles
+- **[MailChimp Integration](docs/MAILCHIMP-INTEGRATION.md)** - Third-party integration patterns and configuration
+- **[API Documentation](docs/API_DOCUMENTATION_INSIGHTS.md)** - Classy API integration patterns and field validation
+- **[Deployment Guide](DEPLOYMENT_GUIDE.md)** - Production deployment and operations guide
 
-### Technical Reference
-- **`CLAUDE.md`** - Complete implementation guide and architecture principles
-- **`docs/API_DOCUMENTATION_INSIGHTS.md`** - Classy API analysis and validated field names
-- **`data/apiv2-public.json`** - Official Classy API specification reference
+### Development Context
+- **[Claude Context](docs/claude-context/)** - Development history and AI assistant instructions
+- **Technical Reference**: `data/apiv2-public.json` - Official Classy API specification
 
-### Operational Guides
+### Quick References
 - **Installation**: Database setup, environment configuration, credential management
-- **Monitoring**: Health checks, performance analysis, alert configuration
+- **Monitoring**: Health checks, performance analysis, alert configuration  
 - **Troubleshooting**: Common issues, recovery procedures, debugging guides
-- **Deployment**: Production setup, scaling considerations, maintenance procedures
+- **CLI Commands**: Complete command reference with examples
 
 ## 🎯 Use Cases
 
